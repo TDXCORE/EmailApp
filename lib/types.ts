@@ -15,7 +15,7 @@ export interface Group {
   user_id: string
   created_at: string
   updated_at: string
-  contact_count?: number
+  contact_count?: number | { count: number }
 }
 
 export interface Contact {

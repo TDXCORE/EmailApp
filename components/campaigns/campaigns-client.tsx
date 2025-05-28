@@ -157,7 +157,7 @@ export function CampaignsClient() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">{campaign.groups?.length || 0} grupos</span>
                   <div className="flex space-x-2">
-                    {campaign.status === "draft" && (
+                    {(campaign.status === "draft" || campaign.status === "scheduled") && (
                       <Button variant="outline" size="sm" onClick={() => handleSend(campaign)}>
                         <Send className="h-4 w-4" />
                       </Button>
