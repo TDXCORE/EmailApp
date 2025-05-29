@@ -26,12 +26,16 @@ export function UnsubscribeClient() {
       try {
         const response = await fetch(`/api/unsubscribe?contact=${contactId}&campaign=${campaignId}`)
 
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(`Error ${response.status}: ${errorText}`)
-        }
+        const contentType = response.headers.get("content-type")
+        let data = null
 
-        const data = await response.json()
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json()
+        } else {
+          // Si no es JSON, intenta leer como texto (HTML)
+          const text = await response.text()
+          throw new Error(text)
+        }
 
         if (data.status === "already-unsubscribed") {
           setStatus("already-unsubscribed")
@@ -43,7 +47,11 @@ export function UnsubscribeClient() {
       } catch (error: any) {
         console.error("Unsubscribe error:", error)
         setStatus("error")
-        setErrorMessage(error.message || "Ocurrió un error al procesar tu solicitud de desuscripción.")
+        setErrorMessage(
+          typeof error.message === "string" && error.message.startsWith("<!DOCTYPE")
+            ? "Ocurrió un error inesperado. Intenta más tarde."
+            : error.message || "Ocurrió un error al procesar tu solicitud de desuscripción."
+        )
       }
     }
 
@@ -75,9 +83,7 @@ export function UnsubscribeClient() {
                 Has sido removido de nuestra lista de correos y ya no recibirás emails de nuestras campañas de
                 marketing.
               </p>
-              <Button variant="outline" asChild>
-                <a href="/">Volver al inicio</a>
-              </Button>
+
             </div>
           )}
 
