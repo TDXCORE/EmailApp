@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { contactSchema } from "@/lib/validations"
-import { createContact } from "@/lib/api"
+import { createContact, getGroups, addContactToGroup } from "@/lib/api"
 import { useAppStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Upload, FileText } from "lucide-react"
@@ -34,6 +34,8 @@ const importSchema = z.object({
 export function ImportContactsModal({ open, onOpenChange }: ImportContactsModalProps) {
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState<any[]>([])
+  const [groups, setGroups] = useState<any[]>([])
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   const { addContact } = useAppStore()
   const { toast } = useToast()
 
@@ -99,6 +101,13 @@ export function ImportContactsModal({ open, onOpenChange }: ImportContactsModalP
     }
   }
 
+  useEffect(() => {
+    if (open) {
+      getGroups().then(setGroups).catch(() => setGroups([]))
+      setSelectedGroups([])
+    }
+  }, [open])
+
   const onSubmit = async (data: any) => {
     setLoading(true)
     try {
@@ -109,11 +118,15 @@ export function ImportContactsModal({ open, onOpenChange }: ImportContactsModalP
       for (const contactData of contacts) {
         try {
           const result = contactSchema.parse(contactData)
+          const { groups, ...contactWithoutGroups } = result;
           const newContact = await createContact({
-            ...result,
+            ...contactWithoutGroups,
             user_id: "", // Will be set by RLS
           })
           addContact(newContact)
+          for (const groupId of selectedGroups) {
+            await addContactToGroup(newContact.id, groupId)
+          }
           imported++
         } catch (error) {
           errors++
@@ -171,13 +184,37 @@ export function ImportContactsModal({ open, onOpenChange }: ImportContactsModalP
             <Textarea
               id="csvData"
               {...register("csvData")}
-              placeholder="email,first_name,last_name,phone
-juan@email.com,Juan,Pérez,+1234567890
-maria@email.com,María,García,+0987654321"
+              placeholder="email,first_name,last_name,phone\njuan@email.com,Juan,Pérez,+1234567890\nmaria@email.com,María,García,+0987654321"
               rows={10}
               className="font-mono text-sm"
             />
             {errors.csvData && <p className="text-sm text-red-600">{errors.csvData.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Asignar a grupos</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded-md p-3">
+              {groups.map((group: any) => (
+                <div key={group.id} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id={`group-${group.id}`}
+                    checked={selectedGroups.includes(group.id)}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedGroups([...selectedGroups, group.id])
+                      } else {
+                        setSelectedGroups(selectedGroups.filter(id => id !== group.id))
+                      }
+                    }}
+                  />
+                  <Label htmlFor={`group-${group.id}`} className="text-sm">
+                    {group.name}
+                  </Label>
+                </div>
+              ))}
+              {groups.length === 0 && <span className="text-gray-500 text-sm">No hay grupos disponibles</span>}
+            </div>
           </div>
 
           <div className="flex justify-between">
