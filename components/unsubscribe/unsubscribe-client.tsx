@@ -24,7 +24,7 @@ export function UnsubscribeClient() {
 
     const processUnsubscribe = async () => {
       try {
-        const response = await fetch(`/api/unsubscribe?contact=${contactId}&campaign=${campaignId}`)
+        const response = await fetch(`/api/unsubscribe?contact=${contactId}&campaign=${campaignId}&format=json`)
 
         const contentType = response.headers.get("content-type")
         let data = null
