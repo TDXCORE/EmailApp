@@ -1,6 +1,12 @@
 export const generateUnsubscribeLink = (contactId: string, campaignId: string): string => {
+  // Use the NEXT_PUBLIC_APP_URL environment variable or fallback to localhost
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-  return `${baseUrl}/api/unsubscribe?contact=${contactId}&campaign=${campaignId}`
+
+  // Ensure baseUrl doesn't end with a slash
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+
+  // Construct the proper unsubscribe URL
+  return `${normalizedBaseUrl}/api/unsubscribe?contact=${contactId}&campaign=${campaignId}`
 }
 
 export const addUnsubscribeFooter = (htmlContent: string, contactId: string, campaignId: string): string => {

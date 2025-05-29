@@ -8,12 +8,31 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const contactId = searchParams.get("contact")
   const campaignId = searchParams.get("campaign")
+  const format = searchParams.get("format") || "html" // Default to HTML response
 
-  // Log the unsubscribe attempt
-  console.log("Unsubscribe attempt:", { contactId, campaignId, url: request.url })
+  // Enhanced logging for debugging
+  console.log("Unsubscribe request received:", {
+    contactId,
+    campaignId,
+    format,
+    url: request.url,
+    headers: Object.fromEntries(request.headers),
+    timestamp: new Date().toISOString(),
+  })
 
   if (!contactId || !campaignId) {
     console.error("Missing parameters in unsubscribe request:", { contactId, campaignId })
+
+    if (format === "json") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Missing required parameters",
+        },
+        { status: 400 },
+      )
+    }
+
     return new NextResponse(generateErrorPage("Parámetros faltantes", "El enlace de desuscripción no es válido."), {
       status: 400,
       headers: { "Content-Type": "text/html" },
@@ -30,6 +49,17 @@ export async function GET(request: NextRequest) {
 
     if (contactError) {
       console.error("Error fetching contact:", contactError)
+
+      if (format === "json") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Contact not found",
+          },
+          { status: 404 },
+        )
+      }
+
       return new NextResponse(
         generateErrorPage("Contacto no encontrado", "No se pudo encontrar el contacto especificado."),
         {
@@ -47,6 +77,17 @@ export async function GET(request: NextRequest) {
 
     if (campaignError) {
       console.error("Error fetching campaign:", campaignError)
+
+      if (format === "json") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Campaign not found",
+          },
+          { status: 404 },
+        )
+      }
+
       return new NextResponse(
         generateErrorPage("Campaña no encontrada", "No se pudo encontrar la campaña especificada."),
         {
@@ -58,6 +99,17 @@ export async function GET(request: NextRequest) {
 
     if (!contact || !campaign) {
       console.error("Contact or campaign not found:", { contact: !!contact, campaign: !!campaign })
+
+      if (format === "json") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Required data not found",
+          },
+          { status: 404 },
+        )
+      }
+
       return new NextResponse(
         generateErrorPage("Datos no encontrados", "No se pudieron encontrar los datos necesarios."),
         {
@@ -70,6 +122,15 @@ export async function GET(request: NextRequest) {
     // Check if already unsubscribed
     if (contact.status === "unsubscribed") {
       console.log("Contact already unsubscribed:", contact.email)
+
+      if (format === "json") {
+        return NextResponse.json({
+          success: true,
+          status: "already-unsubscribed",
+          email: contact.email,
+        })
+      }
+
       return new NextResponse(generateAlreadyUnsubscribedPage(contact.email), {
         headers: { "Content-Type": "text/html" },
       })
@@ -140,6 +201,16 @@ export async function GET(request: NextRequest) {
       timestamp: now,
     })
 
+    // Return response based on format
+    if (format === "json") {
+      return NextResponse.json({
+        success: true,
+        status: "unsubscribed",
+        email: contact.email,
+        campaignName: campaign.name,
+      })
+    }
+
     // Return success page
     return new NextResponse(generateSuccessPage(contact.email, campaign.name), {
       headers: { "Content-Type": "text/html" },
@@ -152,6 +223,17 @@ export async function GET(request: NextRequest) {
       campaignId,
       timestamp: new Date().toISOString(),
     })
+
+    if (format === "json") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Internal server error",
+          message: error.message,
+        },
+        { status: 500 },
+      )
+    }
 
     return new NextResponse(
       generateErrorPage(
