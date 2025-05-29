@@ -15,7 +15,8 @@ export interface Group {
   user_id: string
   created_at: string
   updated_at: string
-  contact_count?: number | { count: number }
+  contact_count?: number
+  contact_groups?: any[] // Add this for the raw query result
 }
 
 export interface Contact {
@@ -77,4 +78,15 @@ export interface Config {
   user_id: string
   created_at: string
   updated_at: string
+}
+
+export interface UnsubscribeLog {
+  id: string
+  contact_id: string
+  campaign_id: string
+  email: string
+  reason: "user_request" | "bounce" | "spam_complaint" | "admin_action"
+  user_id: string
+  unsubscribed_at: string
+  created_at: string
 }

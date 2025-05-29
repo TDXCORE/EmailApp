@@ -1,6 +1,7 @@
 import { supabase } from "./supabase"
 import type { Campaign, Contact, Group, Config, CampaignMetrics } from "./types"
 import { getCurrentUser } from "./auth"
+import { createEmailTemplate, validateEmailTemplate } from "./email-templates"
 
 // Groups API
 export const getGroups = async (): Promise<Group[]> => {
@@ -8,12 +9,20 @@ export const getGroups = async (): Promise<Group[]> => {
     .from("groups")
     .select(`
       *,
-      contact_count:contact_groups(count)
+      contact_groups(count)
     `)
     .order("created_at", { ascending: false })
 
   if (error) throw error
-  return data || []
+
+  // Process the data to extract the actual count
+  const processedData =
+    data?.map((group) => ({
+      ...group,
+      contact_count: group.contact_groups?.[0]?.count || 0,
+    })) || []
+
+  return processedData
 }
 
 export const createGroup = async (group: Partial<Group>) => {
@@ -126,6 +135,12 @@ export const createCampaign = async (campaign: Partial<Campaign>) => {
   const user = await getCurrentUser()
   if (!user) throw new Error("User not authenticated")
 
+  // Validate email content
+  const validation = validateEmailTemplate(campaign.content || "")
+  if (!validation.isValid) {
+    throw new Error(`Contenido del email inválido: ${validation.errors.join(", ")}`)
+  }
+
   const { data, error } = await supabase
     .from("campaigns")
     .insert({ ...campaign, user_id: user.id })
@@ -137,6 +152,14 @@ export const createCampaign = async (campaign: Partial<Campaign>) => {
 }
 
 export const updateCampaign = async (id: string, updates: Partial<Campaign>) => {
+  // Validate email content if being updated
+  if (updates.content) {
+    const validation = validateEmailTemplate(updates.content)
+    if (!validation.isValid) {
+      throw new Error(`Contenido del email inválido: ${validation.errors.join(", ")}`)
+    }
+  }
+
   const { data, error } = await supabase.from("campaigns").update(updates).eq("id", id).select().single()
 
   if (error) throw error
@@ -281,6 +304,17 @@ export const deleteConfig = async (id: string) => {
   if (error) throw error
 }
 
+// Unsubscribe logs API
+export const getUnsubscribeLogs = async () => {
+  const { data, error } = await supabase
+    .from("unsubscribe_logs")
+    .select("*")
+    .order("unsubscribed_at", { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
 // Send Campaign API
 export const sendCampaign = async (campaignId: string) => {
   const user = await getCurrentUser()
@@ -304,7 +338,13 @@ export const sendCampaign = async (campaignId: string) => {
 
   if (campaignError) throw campaignError
 
-  // Get all contacts from campaign groups
+  // Validate campaign content before sending
+  const validation = validateEmailTemplate(campaign.content)
+  if (!validation.isValid) {
+    throw new Error(`No se puede enviar la campaña: ${validation.errors.join(", ")}`)
+  }
+
+  // Get all active contacts from campaign groups
   const contacts: Contact[] = []
   campaign.groups?.forEach((cg: any) => {
     cg.group.contacts?.forEach((cc: any) => {
@@ -315,17 +355,17 @@ export const sendCampaign = async (campaignId: string) => {
   })
 
   if (contacts.length === 0) {
-    throw new Error("No active contacts found in campaign groups")
+    throw new Error("No se encontraron contactos activos en los grupos de la campaña")
   }
 
   // Import email service
   const { emailService } = await import("./email-service")
 
-  // Send emails
+  // Send emails with unsubscribe links
   const emails = contacts.map((contact) => ({
     to: contact.email,
     subject: campaign.subject,
-    htmlBody: campaign.content,
+    htmlBody: createEmailTemplate(campaign.content, contact.id, campaignId),
   }))
 
   const result = await emailService.sendBulkEmail(emails)
@@ -345,6 +385,16 @@ export const sendCampaign = async (campaignId: string) => {
   await updateCampaign(campaignId, {
     status: "sent",
     sent_at: now,
+  })
+
+  // Log campaign send
+  console.log("Campaign sent successfully:", {
+    campaignId,
+    campaignName: campaign.name,
+    totalContacts: contacts.length,
+    successfulSends: result.success,
+    failedSends: result.failed,
+    timestamp: now,
   })
 
   return {

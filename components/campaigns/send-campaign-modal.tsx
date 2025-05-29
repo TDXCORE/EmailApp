@@ -106,6 +106,9 @@ export function SendCampaignModal({ open, onOpenChange, campaign, onCampaignSent
             <p className="text-sm text-gray-500 mt-2">
               Se enviará a aproximadamente {totalContacts} contactos en {campaign.groups?.length || 0} grupos
             </p>
+            {campaign.status === "scheduled" && (
+              <p className="text-sm text-blue-600 mt-1">⚡ Envío forzado - Esta campaña estaba programada</p>
+            )}
           </div>
 
           {loading && (

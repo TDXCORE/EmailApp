@@ -128,9 +128,7 @@ export function GroupsClient() {
 
                 <div className="flex items-center text-sm text-gray-600">
                   <Users className="mr-2 h-4 w-4" />
-                  {(typeof group.contact_count === "object" && group.contact_count !== null
-                    ? group.contact_count.count
-                    : group.contact_count || 0)} contactos
+                  {typeof group.contact_count === "object" ? 0 : group.contact_count || 0} contactos
                 </div>
 
                 <div className="flex items-center justify-between pt-2">

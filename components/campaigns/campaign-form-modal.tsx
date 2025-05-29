@@ -14,9 +14,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { campaignSchema, type CampaignFormData } from "@/lib/validations"
 import { createCampaign, updateCampaign, getGroups, addCampaignToGroup, removeCampaignFromGroup } from "@/lib/api"
 import { useAppStore } from "@/lib/store"
@@ -33,6 +33,7 @@ interface CampaignFormModalProps {
 export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignFormModalProps) {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(false)
+  const [content, setContent] = useState("")
   const { addCampaign, updateCampaign: updateCampaignStore } = useAppStore()
   const { toast } = useToast()
 
@@ -57,6 +58,7 @@ export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignForm
     if (open) {
       loadGroups()
       if (campaign) {
+        setContent(campaign.content)
         reset({
           name: campaign.name,
           subject: campaign.subject,
@@ -66,6 +68,7 @@ export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignForm
           groups: campaign.groups?.map((g) => g.id) || [],
         })
       } else {
+        setContent("")
         reset({
           name: "",
           subject: "",
@@ -91,24 +94,34 @@ export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignForm
     }
   }
 
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent)
+    setValue("content", newContent)
+  }
+
   const onSubmit = async (data: CampaignFormData) => {
     setLoading(true)
     try {
       let savedCampaign: Campaign
 
+      const campaignData = {
+        ...data,
+        content: content, // Use the rich text editor content
+      }
+
       if (campaign) {
         savedCampaign = await updateCampaign(campaign.id, {
-          name: data.name,
-          subject: data.subject,
-          content: data.content,
-          status: data.status,
-          scheduled_at: data.scheduled_at || null,
+          name: campaignData.name,
+          subject: campaignData.subject,
+          content: campaignData.content,
+          status: campaignData.status,
+          scheduled_at: campaignData.scheduled_at || null,
         })
         updateCampaignStore(campaign.id, savedCampaign)
 
         // Update campaign-group relationships
         const currentGroups = campaign.groups?.map((g) => g.id) || []
-        const newGroups = data.groups
+        const newGroups = campaignData.groups
 
         // Remove old relationships
         for (const groupId of currentGroups) {
@@ -130,15 +143,15 @@ export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignForm
         })
       } else {
         savedCampaign = await createCampaign({
-          name: data.name,
-          subject: data.subject,
-          content: data.content,
-          status: data.status,
-          scheduled_at: data.scheduled_at || null,
+          name: campaignData.name,
+          subject: campaignData.subject,
+          content: campaignData.content,
+          status: campaignData.status,
+          scheduled_at: campaignData.scheduled_at || null,
         })
 
         // Add campaign-group relationships
-        for (const groupId of data.groups) {
+        for (const groupId of campaignData.groups) {
           await addCampaignToGroup(savedCampaign.id, groupId)
         }
 
@@ -174,7 +187,7 @@ export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignForm
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{campaign ? "Editar Campaña" : "Nueva Campaña"}</DialogTitle>
           <DialogDescription>
@@ -219,14 +232,16 @@ export function CampaignFormModal({ open, onOpenChange, campaign }: CampaignForm
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="content">Contenido del email</Label>
-            <Textarea
-              id="content"
-              {...register("content")}
+            <Label>Contenido del email</Label>
+            <RichTextEditor
+              value={content}
+              onChange={handleContentChange}
               placeholder="Escribe el contenido de tu email aquí..."
-              rows={8}
             />
             {errors.content && <p className="text-sm text-red-600">{errors.content.message}</p>}
+            <p className="text-xs text-gray-500">
+              Nota: Se agregará automáticamente un enlace de desuscripción al final del email.
+            </p>
           </div>
 
           <div className="space-y-2">

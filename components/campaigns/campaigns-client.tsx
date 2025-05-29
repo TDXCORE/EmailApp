@@ -5,10 +5,10 @@ import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getCampaigns, deleteCampaign } from "@/lib/api"
+import { getCampaigns, deleteCampaign, updateCampaign } from "@/lib/api"
 import { useAppStore } from "@/lib/store"
 import type { Campaign } from "@/lib/types"
-import { Plus, Edit, Trash2, Calendar, Send, Mail } from "lucide-react"
+import { Plus, Edit, Trash2, Calendar, Send, Mail, Play, Pause, MessageSquare } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CampaignFormModal } from "@/components/campaigns/campaign-form-modal"
 import { SendCampaignModal } from "@/components/campaigns/send-campaign-modal"
@@ -21,6 +21,7 @@ export function CampaignsClient() {
   const [campaignToSend, setCampaignToSend] = useState<Campaign | undefined>()
   const { campaigns, setCampaigns, removeCampaign, isLoading, setIsLoading } = useAppStore()
   const { toast } = useToast()
+  const [pausingCampaign, setPausingCampaign] = useState<string | null>(null)
 
   useEffect(() => {
     loadCampaigns()
@@ -74,6 +75,38 @@ export function CampaignsClient() {
   const handleNewCampaign = () => {
     setSelectedCampaign(undefined)
     setShowCampaignModal(true)
+  }
+
+  const handleForceSend = async (campaign: Campaign) => {
+    if (confirm("¿Estás seguro de que quieres enviar esta campaña inmediatamente?")) {
+      setCampaignToSend(campaign)
+      setShowSendModal(true)
+    }
+  }
+
+  const handleTogglePause = async (campaign: Campaign) => {
+    setPausingCampaign(campaign.id)
+    try {
+      const newStatus = campaign.status === "paused" ? "scheduled" : "paused"
+      await updateCampaign(campaign.id, { status: newStatus })
+
+      // Update the campaign in the store
+      const updatedCampaigns = campaigns.map((c) => (c.id === campaign.id ? { ...c, status: newStatus } : c))
+      setCampaigns(updatedCampaigns)
+
+      toast({
+        title: "Éxito",
+        description: `Campaña ${newStatus === "paused" ? "pausada" : "reanudada"} correctamente`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo cambiar el estado de la campaña",
+        variant: "destructive",
+      })
+    } finally {
+      setPausingCampaign(null)
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -156,12 +189,45 @@ export function CampaignsClient() {
 
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">{campaign.groups?.length || 0} grupos</span>
-                  <div className="flex space-x-2">
-                    {(campaign.status === "draft" || campaign.status === "scheduled") && (
+                  <div className="flex space-x-1">
+                    {/* Send button - only for scheduled campaigns */}
+                    {campaign.status === "scheduled" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleForceSend(campaign)}
+                        title="Enviar ahora"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                    {/* Pause/Play button - for scheduled and paused campaigns */}
+                    {(campaign.status === "scheduled" || campaign.status === "paused") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTogglePause(campaign)}
+                        disabled={pausingCampaign === campaign.id}
+                        title={campaign.status === "paused" ? "Reanudar campaña" : "Pausar campaña"}
+                      >
+                        {pausingCampaign === campaign.id ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+                        ) : campaign.status === "paused" ? (
+                          <Play className="h-4 w-4" />
+                        ) : (
+                          <Pause className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+
+                    {/* Send button - for draft campaigns */}
+                    {campaign.status === "draft" && (
                       <Button variant="outline" size="sm" onClick={() => handleSend(campaign)}>
                         <Send className="h-4 w-4" />
                       </Button>
                     )}
+
                     <Button variant="outline" size="sm" onClick={() => handleEdit(campaign)}>
                       <Edit className="h-4 w-4" />
                     </Button>
