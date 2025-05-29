@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -11,6 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { signIn } from "@/lib/auth"
 import { Loader2, Mail, Lock } from "lucide-react"
+
+// Debug helper
+const debugLog = (message: string, data?: any) => {
+  console.log(`[LOGIN FORM DEBUG] ${message}`, data || "")
+}
 
 export function LoginForm() {
   const [email, setEmail] = useState("")
@@ -24,16 +28,38 @@ export function LoginForm() {
     setLoading(true)
     setError("")
 
+    debugLog("Starting login submission", { email })
+
     try {
-      const { error } = await signIn(email, password)
-      if (error) {
-        setError(error.message)
-      } else {
-        router.push("/dashboard")
+      const { data, error: signInError } = await signIn(email, password)
+
+      if (signInError) {
+        debugLog("Login failed", signInError)
+        setError(signInError.message || "Error al iniciar sesión")
+        setLoading(false)
+        return
       }
-    } catch (err) {
-      setError("An unexpected error occurred")
-    } finally {
+
+      if (data?.session) {
+        debugLog("Login successful, preparing redirect", {
+          userId: data.session.user.id,
+          email: data.session.user.email,
+        })
+
+        // Wait a moment for the session to be fully established
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        debugLog("Redirecting to dashboard")
+        // Use window.location for a hard redirect to ensure middleware picks up the session
+        window.location.href = "/dashboard"
+      } else {
+        debugLog("No session returned from login")
+        setError("No se pudo establecer la sesión")
+        setLoading(false)
+      }
+    } catch (err: any) {
+      debugLog("Login exception", err)
+      setError("Error inesperado al iniciar sesión")
       setLoading(false)
     }
   }
@@ -65,6 +91,7 @@ export function LoginForm() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -81,15 +108,27 @@ export function LoginForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Iniciar Sesión
+              {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </Button>
           </form>
+
+          <div className="mt-4 text-center text-sm text-gray-600">
+            <p>¿No tienes cuenta? Contacta al administrador</p>
+          </div>
+
+          {/* Debug info in development */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
+              <p>Debug: Check browser console for detailed logs</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
