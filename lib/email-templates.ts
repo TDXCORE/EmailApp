@@ -5,8 +5,8 @@ export const generateUnsubscribeLink = (contactId: string, campaignId: string): 
   // Ensure baseUrl doesn't end with a slash
   const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
 
-  // Construct the proper unsubscribe URL
-  return `${normalizedBaseUrl}/api/unsubscribe?contact=${contactId}&campaign=${campaignId}`
+  // Construct the proper unsubscribe URL (ahora apunta a la página, no al API)
+  return `${normalizedBaseUrl}/unsubscribe?contact=${contactId}&campaign=${campaignId}`
 }
 
 export const addUnsubscribeFooter = (htmlContent: string, contactId: string, campaignId: string): string => {
