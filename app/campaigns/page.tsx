@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { CampaignsClient } from "@/components/campaigns/campaigns-client"
 
 export const metadata: Metadata = {
-  title: "Campañas - Email Marketing App",
+  title: "Campañas - TDX Transformación Digital SAS",
   description: "Gestiona tus campañas de email marketing",
 }
 

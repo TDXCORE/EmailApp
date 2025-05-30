@@ -38,7 +38,7 @@ export class EmailService {
         secretAccessKey: configMap["AWS_SES_SECRET_KEY"] || "zU0yoN7USI+8AEzCyixU0e+OdpvJRXvA/8IhC6aS",
         region: configMap["AWS_SES_REGION"] || "us-east-1",
         fromEmail: configMap["FROM_EMAIL"] || "ventas@tdxcore.com",
-        fromName: configMap["FROM_NAME"] || "Email Marketing App",
+        fromName: configMap["FROM_NAME"] || "TDX Transformación Digital SAS",
       }
 
       AWS.config.update({

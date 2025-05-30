@@ -7,7 +7,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Email Marketing App",
+  title: "TDX",
   description: "Aplicación completa de email marketing",
     generator: 'v0.dev'
 }

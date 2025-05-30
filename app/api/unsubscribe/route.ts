@@ -344,7 +344,7 @@ function generateSuccessPage(email: string, campaignName: string): string {
         <div class="footer">
           <p>Gracias por haber sido parte de nuestra comunidad.</p>
           <p style="font-size: 12px; margin-top: 16px;">
-            Email Marketing App - ${new Date().getFullYear()}
+            TDX Transformación Digital SAS - ${new Date().getFullYear()}
           </p>
         </div>
       </div>

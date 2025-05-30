@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { SettingsClient } from "@/components/settings/settings-client"
 
 export const metadata: Metadata = {
-  title: "Configuración - Email Marketing App",
+  title: "Configuración - TDX",
   description: "Gestiona las variables de entorno y configuraciones",
 }
 

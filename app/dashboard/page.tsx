@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { DashboardClient } from "@/components/dashboard/dashboard-client"
 
 export const metadata: Metadata = {
-  title: "Dashboard - Email Marketing App",
+  title: "Dashboard - TDX",
   description: "Resumen de tu actividad de email marketing",
 }
 

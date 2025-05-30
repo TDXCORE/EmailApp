@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { ContactsClient } from "@/components/contacts/contacts-client"
 
 export const metadata: Metadata = {
-  title: "Contactos - Email Marketing App",
+  title: "Contactos - TDX",
   description: "Gestiona tu lista de contactos",
 }
 
