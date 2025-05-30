@@ -13,11 +13,61 @@ export const addUnsubscribeFooter = (htmlContent: string, contactId: string, cam
   const unsubscribeLink = generateUnsubscribeLink(contactId, campaignId)
 
   const footer = `
-    <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #666; text-align: center; font-family: Arial, sans-serif;">
-      <p style="margin: 0 0 10px 0;">Si no deseas recibir más emails como este, puedes <a href="${unsubscribeLink}" style="color: #0f766e; text-decoration: underline;" target="_blank">darte de baja aquí</a>.</p>
-      <p style="margin: 10px 0 0 0; font-size: 11px; color: #999;">Este email fue enviado por Email Marketing App</p>
+  <div style="
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e5e5;
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    line-height: 1.4;
+  ">
+    <!-- Logo centrado -->
+    <div style="margin-bottom: 15px;">
+      <img
+        src="/tdxNegro.png"
+        alt="TDX Logo"
+        width="120"
+        height="40"
+        style="display: block; margin: 0 auto;"
+      />
     </div>
-  `
+
+    <!-- Link de baja -->
+    <p style="margin: 0 0 10px 0;">
+      <a
+        href="${unsubscribeLink}"
+        style="color: #0f766e; text-decoration: underline;"
+        target="_blank"
+      >
+        Cancelar suscripción
+      </a>
+      &nbsp;|&nbsp;
+      Enviado por <strong>TDX Transformación Digital SAS</strong>
+    </p>
+
+    <!-- Dirección -->
+    <p style="margin: 5px 0;">
+      Calle 61 #56-51 • Medellín, Colombia • 050010
+    </p>
+
+    <!-- Redes / Contacto -->
+    <p style="margin: 5px 0;">
+      <a href="https://www.linkedin.com/company/tdxcore/" style="color: #0f766e; text-decoration: none;" target="_blank">
+        LinkedIn
+      </a>
+      &nbsp;|&nbsp;
+      <a href="https://www.instagram.com/tdxcore" style="color: #0f766e; text-decoration: none;" target="_blank">
+        Instagram
+      </a>
+      &nbsp;|&nbsp;
+      <a href="https://wa.me/573123626283" style="color: #0f766e; text-decoration: none;" target="_blank">
+        WhatsApp
+      </a>
+    </p>
+  </div>
+`;
 
   // Insert footer before closing body tag, or append if no body tag
   if (htmlContent.includes("</body>")) {
