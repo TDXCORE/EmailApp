@@ -26,7 +26,7 @@ export const addUnsubscribeFooter = (htmlContent: string, contactId: string, cam
     <!-- Logo centrado -->
     <div style="margin-bottom: 15px;">
       <img
-        src="/tdxNegro.png"
+        src="https://v0-email-marketing-app-tau.vercel.app/tdxNegro.png"
         alt="TDX Logo"
         width="120"
         height="40"
