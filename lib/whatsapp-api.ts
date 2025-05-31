@@ -146,54 +146,78 @@ export class WhatsAppAPI {
   }
 
   async handleWebhook(payload: any) {
+    console.log('Received webhook payload:', JSON.stringify(payload, null, 2));
     try {
       const { object, entry } = payload
 
       if (object !== 'whatsapp_business_account') {
+        console.log('Payload object is not whatsapp_business_account, ignoring.');
         return
       }
 
       for (const entryItem of entry) {
+        console.log('Processing entry item:', JSON.stringify(entryItem, null, 2));
         const { changes } = entryItem
         for (const change of changes) {
+          console.log('Processing change:', JSON.stringify(change, null, 2));
           if (change.field === 'messages') {
+            console.log('Found messages change.');
             const { value } = change
+            console.log('Messages value:', JSON.stringify(value, null, 2));
             const { messages, contacts } = value
 
-            for (const message of messages) {
-              // Store incoming message in Supabase
-              await this.supabase
-                .from('whatsapp_messages')
-                .insert({
-                  message_id: message.id,
-                  from_number: message.from,
-                  to_number: message.to,
-                  type: message.type,
-                  content: message,
-                  status: 'received',
-                  created_at: new Date().toISOString(),
-                })
-
-              // Store contact if new
-              if (contacts && contacts.length > 0) {
-                const contact = contacts[0]
-                await this.supabase
-                  .from('whatsapp_contacts')
-                  .upsert({
-                    wa_id: contact.wa_id,
-                    profile: {
-                      name: contact.profile?.name,
-                    },
-                    updated_at: new Date().toISOString(),
+            if (messages && messages.length > 0) {
+              for (const message of messages) {
+                console.log('Processing message:', JSON.stringify(message, null, 2));
+                // Store incoming message in Supabase
+                const { data, error } = await this.supabase
+                  .from('whatsapp_messages')
+                  .insert({
+                    message_id: message.id,
+                    from_number: message.from,
+                    to_number: message.to,
+                    type: message.type,
+                    content: message,
+                    status: 'received',
+                    created_at: new Date().toISOString(),
                   })
+
+                if (error) {
+                  console.error('Error inserting incoming message into Supabase:', error);
+                } else {
+                  console.log('Successfully inserted incoming message:', data);
+                }
+
+                // Store contact if new
+                if (contacts && contacts.length > 0) {
+                  const contact = contacts[0]
+                  console.log('Processing contact:', JSON.stringify(contact, null, 2));
+                  const { data: contactData, error: contactError } = await this.supabase
+                    .from('whatsapp_contacts')
+                    .upsert({
+                      wa_id: contact.wa_id,
+                      profile: {
+                        name: contact.profile?.name,
+                      },
+                      updated_at: new Date().toISOString(),
+                    })
+                    
+                  if (contactError) {
+                    console.error('Error upserting contact into Supabase:', contactError);
+                  } else {
+                    console.log('Successfully upserted contact:', contactData);
+                  }
+                }
               }
+            } else {
+              console.log('No messages found in the change value.');
             }
           }
         }
       }
     } catch (error) {
-      console.error('Error handling webhook:', error)
-      throw error
+      console.error('Unhandled error handling webhook:', error);
+      throw error; // Re-throw the error so the route handler catches it
     }
   }
 }
