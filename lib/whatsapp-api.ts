@@ -5,6 +5,9 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 const WHATSAPP_WEBHOOK_TOKEN = process.env.WHATSAPP_WEBHOOK_TOKEN
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
 const BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`
 
 export interface WhatsAppMessage {
@@ -88,8 +91,13 @@ export interface WhatsAppMessage {
 export class WhatsAppAPI {
   private static instance: WhatsAppAPI
   private supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    SUPABASE_URL,
+    SUPABASE_SERVICE_KEY,
+    {
+      auth: {
+        persistSession: false
+      }
+    }
   )
 
   private constructor() {}
