@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Toaster } from "@/components/ui/toaster"
-import { getSupabaseClient } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 
 // Debug helper
@@ -23,7 +23,6 @@ export function ClientLayout({
   const [initializing, setInitializing] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = getSupabaseClient()
 
   const isLoginPage = pathname === "/login"
   const isUnsubscribePage = pathname === "/unsubscribe" || pathname.startsWith("/unsubscribe")

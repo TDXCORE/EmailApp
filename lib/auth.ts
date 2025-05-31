@@ -1,6 +1,6 @@
 "use client"
 
-import { getSupabaseClient } from "./supabase"
+import { supabase } from "./supabase"
 import type { Profile } from "./types"
 
 // Add debugging helper
@@ -10,7 +10,6 @@ const debugLog = (message: string, data?: any) => {
 
 export const signIn = async (email: string, password: string) => {
   try {
-    const supabase = getSupabaseClient()
     debugLog("Starting sign in process", { email })
 
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -58,8 +57,6 @@ export const signIn = async (email: string, password: string) => {
 
 export const signUp = async (email: string, password: string, fullName?: string) => {
   try {
-    const supabase = getSupabaseClient()
-
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -83,7 +80,6 @@ export const signUp = async (email: string, password: string, fullName?: string)
 
 export const signOut = async () => {
   try {
-    const supabase = getSupabaseClient()
     debugLog("Starting sign out process")
 
     // Clear localStorage backup
@@ -111,8 +107,6 @@ export const signOut = async () => {
 
 export const getCurrentUser = async () => {
   try {
-    const supabase = getSupabaseClient()
-
     const {
       data: { user },
       error,
@@ -133,8 +127,6 @@ export const getCurrentUser = async () => {
 
 export const getSession = async () => {
   try {
-    const supabase = getSupabaseClient()
-
     const {
       data: { session },
       error,
@@ -160,8 +152,6 @@ export const getSession = async () => {
 
 export const getProfile = async (userId: string): Promise<Profile | null> => {
   try {
-    const supabase = getSupabaseClient()
-
     const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
     if (error) {
@@ -178,8 +168,6 @@ export const getProfile = async (userId: string): Promise<Profile | null> => {
 
 export const createProfile = async (profile: Partial<Profile>) => {
   try {
-    const supabase = getSupabaseClient()
-
     const { data, error } = await supabase.from("profiles").insert(profile).select().single()
 
     if (error) {
