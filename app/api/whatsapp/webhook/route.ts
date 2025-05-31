@@ -12,8 +12,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await whatsappApi.verifyWebhook(mode, token, challenge)
-    return NextResponse.json(result)
+    await whatsappApi.verifyWebhook(mode, token, challenge)
+    return new NextResponse(challenge, { status: 200 })
   } catch (error) {
     console.error('Webhook verification failed:', error)
     return NextResponse.json({ error: 'Verification failed' }, { status: 403 })
