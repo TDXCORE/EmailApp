@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { WhatsAppMessage } from '@/lib/whatsapp-api'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 export interface WhatsAppRealtimeMessage {
   id: string
@@ -22,11 +17,27 @@ export interface WhatsAppRealtimeMessage {
 export function useWhatsAppRealtime(conversationId?: string) {
   const [messages, setMessages] = useState<WhatsAppRealtimeMessage[]>([])
   const [channel, setChannel] = useState<RealtimeChannel | null>(null)
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
 
   useEffect(() => {
-    // Initial fetch of messages
+    // Initialize Supabase client only in the browser
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set.");
+      // Handle this error appropriately in the UI, perhaps show a message
+      return; // Exit useEffect if keys are missing
+    }
+
+    const client = createClient(supabaseUrl, supabaseAnonKey);
+    setSupabase(client);
+
+    // Initial fetch of messages and subscription should only happen if supabase client is available
+    if (!client) return;
+
     const fetchMessages = async () => {
-      let query = supabase
+      let query = client
         .from('whatsapp_messages')
         .select('*')
         .order('created_at', { ascending: true })
@@ -48,7 +59,7 @@ export function useWhatsAppRealtime(conversationId?: string) {
     fetchMessages()
 
     // Subscribe to new messages
-    const newChannel = supabase
+    const newChannel = client
       .channel('whatsapp_messages')
       .on(
         'postgres_changes',
@@ -88,7 +99,7 @@ export function useWhatsAppRealtime(conversationId?: string) {
 
     return () => {
       if (channel) {
-        supabase.removeChannel(channel)
+        client.removeChannel(channel)
       }
     }
   }, [conversationId])
