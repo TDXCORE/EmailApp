@@ -1,18 +1,33 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-// Create a server-side Supabase client with service role key for admin operations
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL ?? '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
-  {
-    auth: {
-      persistSession: false
-    }
-  }
-)
-
 export async function GET(request: NextRequest) {
+  // Explicitly check for environment variables and initialize client INSIDE the handler
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // Check if Supabase client was successfully initialized
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set.");
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Server configuration error: Missing Supabase keys",
+      },
+      { status: 500 }
+    );
+  }
+
+  const supabaseAdmin = createClient(
+    supabaseUrl,
+    supabaseServiceKey,
+    {
+      auth: {
+        persistSession: false,
+      },
+    }
+  );
+
   const searchParams = request.nextUrl.searchParams
   const contactId = searchParams.get("contact")
   const campaignId = searchParams.get("campaign")
