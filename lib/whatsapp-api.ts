@@ -1,12 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const WHATSAPP_API_VERSION = 'v18.0'
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 const WHATSAPP_WEBHOOK_TOKEN = process.env.WHATSAPP_WEBHOOK_TOKEN
-
-const SUPABASE_URL = process.env.SUPABASE_URL!
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`
 
@@ -90,15 +87,8 @@ export interface WhatsAppMessage {
 
 export class WhatsAppAPI {
   private static instance: WhatsAppAPI
-  private supabase = createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_KEY,
-    {
-      auth: {
-        persistSession: false
-      }
-    }
-  )
+  // Remove top-level supabase client initialization
+  // private supabase = createClient(...) 
 
   private constructor() {}
 
@@ -107,6 +97,26 @@ export class WhatsAppAPI {
       WhatsAppAPI.instance = new WhatsAppAPI()
     }
     return WhatsAppAPI.instance
+  }
+
+  private getSupabaseClient(): SupabaseClient | null {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set for WhatsApp API.");
+      return null;
+    }
+
+    return createClient(
+      supabaseUrl,
+      supabaseServiceKey,
+      {
+        auth: {
+          persistSession: false
+        }
+      }
+    );
   }
 
   async sendMessage(message: WhatsAppMessage) {
@@ -126,8 +136,15 @@ export class WhatsAppAPI {
 
       const data = await response.json()
       
-      // Store message in Supabase
-      await this.supabase
+      // Store message in Supabase - need to get client here too or refactor
+      const supabase = this.getSupabaseClient();
+      if (!supabase) {
+        console.error("Supabase client not available to store sent message.");
+        // Decide how to handle this error - maybe throw or return a specific status
+        throw new Error("Database connection not configured.");
+      }
+
+      await supabase
         .from('whatsapp_messages')
         .insert({
           message_id: data.messages[0].id,
@@ -154,6 +171,16 @@ export class WhatsAppAPI {
   }
 
   async handleWebhook(payload: any) {
+    // Initialize Supabase client inside the handler
+    const supabase = this.getSupabaseClient();
+    if (!supabase) {
+      console.error("Supabase client not available to handle webhook.");
+      // Return an error response to Meta
+      // Meta expects a 200 OK, but we can log the internal failure
+      // Consider returning a specific error format if needed by Meta for debugging
+      throw new Error("Server configuration error: Database connection missing for webhook.");
+    }
+
     console.log('Received webhook payload:', JSON.stringify(payload, null, 2));
     try {
       const { object, entry } = payload
@@ -178,7 +205,7 @@ export class WhatsAppAPI {
               for (const message of messages) {
                 console.log('Processing message:', JSON.stringify(message, null, 2));
                 // Store incoming message in Supabase
-                const { data, error } = await this.supabase
+                const { data, error } = await supabase
                   .from('whatsapp_messages')
                   .insert({
                     message_id: message.id,
@@ -200,7 +227,7 @@ export class WhatsAppAPI {
                 if (contacts && contacts.length > 0) {
                   const contact = contacts[0]
                   console.log('Processing contact:', JSON.stringify(contact, null, 2));
-                  const { data: contactData, error: contactError } = await this.supabase
+                  const { data: contactData, error: contactError } = await supabase
                     .from('whatsapp_contacts')
                     .upsert({
                       wa_id: contact.wa_id,
