@@ -113,6 +113,9 @@ export class WhatsAppAPI {
   // Remove top-level supabase client initialization
   // private supabase = createClient(...) 
 
+  // Public property to expose the phone number ID
+  public readonly phoneNumberId: string | undefined = WHATSAPP_PHONE_NUMBER_ID;
+
   private constructor() {
     // Debug environment variables
     console.log('WhatsApp API Environment Variables:', {

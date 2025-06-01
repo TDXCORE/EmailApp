@@ -21,7 +21,7 @@ const MessageBubble = ({ message, isSent }: { message: WhatsAppRealtimeMessage, 
 };
 
 export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
-  const { messages } = useWhatsAppRealtime(selectedWaId || undefined)
+  const { messages, setMessages } = useWhatsAppRealtime(selectedWaId || undefined)
   const [isLoading, setIsLoading] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -50,6 +50,23 @@ export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
       }
 
       await whatsappApi.sendMessage(textMessage)
+
+      // Add the sent message to the local state immediately
+      const tempMessage: WhatsAppRealtimeMessage = {
+        id: Date.now().toString(), // Temporary client-side ID
+        message_id: '', // This will be updated by the real-time listener
+        conversationId: selectedWaId || '',
+        from_number: selectedWaId || '', // Outgoing messages show *from* the selected contact in this view
+        to_number: whatsappApi.phoneNumberId as string, // Our number is the recipient of the outgoing message in terms of DB storage
+        type: 'text',
+        content: { text: { body: content } }, // Store the content structure as per WhatsApp API
+        status: 'sent', // Or 'pending'
+        created_at: new Date().toISOString(),
+        isOutgoing: true,
+      };
+
+      setMessages(currentMessages => [...currentMessages, tempMessage]);
+
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {

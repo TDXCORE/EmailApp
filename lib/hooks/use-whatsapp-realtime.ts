@@ -11,7 +11,7 @@ export interface WhatsAppRealtimeMessage {
   from_number: string
   to_number: string
   type: string
-  content: WhatsAppMessage
+  content: any
   status: 'sent' | 'received' | 'delivered' | 'read'
   created_at: string
 }
@@ -75,8 +75,16 @@ export function useWhatsAppRealtime(conversationId?: string) {
           filter: `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`,
         },
         (payload) => {
-          console.log('New message received in realtime:', payload);
-          setMessages((current) => [...current, payload.new as WhatsAppRealtimeMessage])
+          console.log('Realtime INSERT payload:', payload);
+          const newMessage = payload.new as WhatsAppRealtimeMessage;
+          setMessages(currentMessages => {
+            if (currentMessages.find(msg => msg.id === newMessage.id)) {
+              return currentMessages;
+            }
+            const updatedMessages = [...currentMessages, newMessage];
+            updatedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            return updatedMessages;
+          });
         }
       )
       .on(
@@ -88,12 +96,13 @@ export function useWhatsAppRealtime(conversationId?: string) {
           filter: `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`,
         },
         (payload) => {
-          console.log('Message updated in realtime:', payload);
-          setMessages((current) =>
-            current.map((msg) =>
-              msg.id === payload.new.id ? (payload.new as WhatsAppRealtimeMessage) : msg
+          console.log('Realtime UPDATE payload:', payload);
+          const updatedMessage = payload.new as WhatsAppRealtimeMessage;
+          setMessages(currentMessages =>
+            currentMessages.map((msg) =>
+              msg.id === updatedMessage.id ? updatedMessage : msg
             )
-          )
+          );
         }
       )
       .subscribe()
@@ -109,5 +118,5 @@ export function useWhatsAppRealtime(conversationId?: string) {
     }
   }, [conversationId, supabase]);
 
-  return { messages }
+  return { messages, setMessages }
 } 
