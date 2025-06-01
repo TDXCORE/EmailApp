@@ -77,8 +77,13 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
   useEffect(() => {
     if (!selectedWaId) {
       // ... handle no conversation selected
+      // Ensure previous channel is removed if conversationId becomes null
+      setMessages([]); // Clear messages when no conversation is selected
+      // The cleanup function of the previous useEffect takes care of removing the channel
       return;
     }
+
+    console.log('Realtime subscription initiated for conversationId:', selectedWaId);
 
     const newChannel = supabase
       .channel(`whatsapp_messages_${selectedWaId}`)
@@ -89,13 +94,27 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
           schema: 'public',
           table: 'whatsapp_messages',
           // TEMPORARILY REMOVE OR COMMENT OUT THE FILTER:
-          // filter: `from_number=eq.${selectedWaId} OR to_number=eq.${selectedWaId}`,
+          // filter: `from_number=eq.${selectedWaId} OR to_number=eq.${selectedWaId}`, // Removed filter for testing
         },
         (payload) => {
-          console.log('Realtime INSERT (Simplified Listener) event triggered!', payload);
-          // You should see this log if INSERT events are reaching the client for this table
-          // Now you can process the payload to update your messages state
-          // ... your existing logic to add message to state ...
+          console.log('Realtime INSERT event triggered! (Simplified Listener)', payload); // Log payload
+          const newMessage = payload.new as WhatsAppRealtimeMessage; // Cast payload.new to the message type
+          // Find and attach contact to the new message (needed for avatar in bubble)
+          const contact = contacts.find(c => c.wa_id === newMessage.from_number);
+          const newMessageWithContact = { ...newMessage, contact };
+
+          setMessages(currentMessages => {
+             // Avoid duplicates if realtime sends existing messages on subscribe/reconnect
+             if (currentMessages.find(msg => msg.id === newMessageWithContact.id)) {
+               console.log('Realtime INSERT (Simplified): Message already exists, skipping.', newMessageWithContact.id);
+               return currentMessages;
+             }
+            console.log('Realtime INSERT (Simplified): Adding new message.', newMessageWithContact);
+            const updatedMessages = [...currentMessages, newMessageWithContact];
+            // Sort messages by timestamp to ensure correct order
+            updatedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            return updatedMessages;
+          });
         }
       )
       .on(
@@ -104,24 +123,30 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
           event: 'UPDATE',
           schema: 'public',
           table: 'whatsapp_messages',
-           filter: `from_number=eq.${selectedWaId} OR to_number=eq.${selectedWaId}`, // Keep filter for UPDATE
+          filter: `from_number=eq.${selectedWaId} OR to_number=eq.${selectedWaId}`, // Keep filter for UPDATE
         },
         (payload) => {
-           console.log('Realtime UPDATE event triggered!', payload);
-          // ... your existing logic to update message status ...
+           console.log('Realtime UPDATE event triggered!', payload); // Log payload
+           const updatedMessage = payload.new as WhatsAppRealtimeMessage;
+            // Find and attach contact to the updated message (important for initial fetch updates)
+           const contact = contacts.find(c => c.wa_id === updatedMessage.from_number);
+           const updatedMessageWithContact = { ...updatedMessage, contact };
+           console.log('Realtime UPDATE: Updating message.', updatedMessageWithContact);
+           setMessages(currentMessages =>
+             currentMessages.map((msg) =>
+               msg.id === updatedMessageWithContact.id ? updatedMessageWithContact : msg
+             )
+           );
         }
       )
       .subscribe();
 
-    console.log('Realtime subscription initiated for conversationId:', selectedWaId);
-    // This log should appear
-
     return () => {
       console.log('Cleaning up realtime subscription for conversationId:', selectedWaId);
-      supabase.removeChannel(newChannel); // Use removeChannel instead of removeSubscription
+      supabase.removeChannel(newChannel); // Correct cleanup
     };
 
-  }, [selectedWaId, supabase, contacts]); // Dependencies should include conversationId, supabase, and contacts
+  }, [selectedWaId, supabase, contacts, setMessages]); // Added setMessages to dependencies
 
   const handleSendMessage = async (content: string) => {
     setIsLoading(true)
