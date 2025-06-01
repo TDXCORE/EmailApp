@@ -245,7 +245,7 @@ export class WhatsAppAPI {
                         name: contact.profile?.name,
                       },
                       updated_at: new Date().toISOString(),
-                    })
+                    }, { onConflict: 'wa_id' })
                     
                   if (contactError) {
                     console.error('Error upserting contact into Supabase:', contactError);
