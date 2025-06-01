@@ -1,5 +1,7 @@
+'use client';
+
 import { useEffect, useState } from 'react'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createClientComponentClient, SupabaseClient } from '@supabase/auth-helpers-nextjs'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { WhatsAppMessage } from '@/lib/whatsapp-api'
 
@@ -15,29 +17,29 @@ export interface WhatsAppRealtimeMessage {
 }
 
 export function useWhatsAppRealtime(conversationId?: string) {
+  console.log('useWhatsAppRealtime hook running for conversationId:', conversationId);
   const [messages, setMessages] = useState<WhatsAppRealtimeMessage[]>([])
   const [channel, setChannel] = useState<RealtimeChannel | null>(null)
-  const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
+  
+  const supabase = createClientComponentClient();
 
   useEffect(() => {
-    // Initialize Supabase client only in the browser
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    console.log('useEffect in useWhatsAppRealtime running for conversationId:', conversationId);
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error("NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set.");
-      // Handle this error appropriately in the UI, perhaps show a message
-      return; // Exit useEffect if keys are missing
+    if (!conversationId) {
+        console.log('No conversationId provided, skipping message fetch and subscription.');
+        setMessages([]);
+        if (channel) {
+          supabase.removeChannel(channel);
+          setChannel(null);
+        }
+        return;
     }
-
-    const client = createClient(supabaseUrl, supabaseAnonKey);
-    setSupabase(client);
-
-    // Initial fetch of messages and subscription should only happen if supabase client is available
-    if (!client) return;
+    
+    console.log('Fetching messages for conversationId:', conversationId);
 
     const fetchMessages = async () => {
-      let query = client
+      let query = supabase
         .from('whatsapp_messages')
         .select('*')
         .order('created_at', { ascending: true })
@@ -48,30 +50,32 @@ export function useWhatsAppRealtime(conversationId?: string) {
 
       const { data, error } = await query
 
+      console.log('Supabase message fetch result for', conversationId, { data, error });
+
       if (error) {
         console.error('Error fetching messages:', error)
         return
       }
 
       setMessages(data || [])
+      console.log(`Fetched ${data ? data.length : 0} messages for ${conversationId}.`);
     }
 
     fetchMessages()
 
-    // Subscribe to new messages
-    const newChannel = client
-      .channel('whatsapp_messages')
+    console.log('Subscribing to new messages for conversationId:', conversationId);
+    const newChannel = supabase
+      .channel(`whatsapp_messages_${conversationId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'whatsapp_messages',
-          filter: conversationId
-            ? `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`
-            : undefined,
+          filter: `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`,
         },
         (payload) => {
+          console.log('New message received in realtime:', payload);
           setMessages((current) => [...current, payload.new as WhatsAppRealtimeMessage])
         }
       )
@@ -81,11 +85,10 @@ export function useWhatsAppRealtime(conversationId?: string) {
           event: 'UPDATE',
           schema: 'public',
           table: 'whatsapp_messages',
-          filter: conversationId
-            ? `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`
-            : undefined,
+          filter: `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`,
         },
         (payload) => {
+          console.log('Message updated in realtime:', payload);
           setMessages((current) =>
             current.map((msg) =>
               msg.id === payload.new.id ? (payload.new as WhatsAppRealtimeMessage) : msg
@@ -96,13 +99,15 @@ export function useWhatsAppRealtime(conversationId?: string) {
       .subscribe()
 
     setChannel(newChannel)
+    console.log('Realtime subscription active for conversationId:', conversationId);
 
     return () => {
+      console.log('Cleaning up realtime subscription for conversationId:', conversationId);
       if (channel) {
-        client.removeChannel(channel)
+        supabase.removeChannel(channel)
       }
     }
-  }, [conversationId])
+  }, [conversationId, supabase]);
 
   return { messages }
 } 
