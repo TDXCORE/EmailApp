@@ -217,6 +217,7 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
     try {
       let messagePayload: WhatsAppMessage;
       let uploadedFileUrl: string | null = null;
+      let whatsappMediaId: string | null = null;
 
       if (typeof content === 'string') {
         // Handle text message
@@ -234,13 +235,16 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
         const file = content;
         const fileType = file.type.split('/')[0]; // Get the main type (image, audio, video, application)
 
-        // Upload file to Supabase Storage
-        uploadedFileUrl = await uploadFile(file);
-        if (!uploadedFileUrl) {
-          console.error('Failed to upload file');
+        // Upload file to WhatsApp Cloud API first
+        console.log('Uploading file to WhatsApp API before sending...', file.name);
+        const whatsappMediaId = await whatsappApi.uploadMediaToWhatsApp(file);
+
+        if (!whatsappMediaId) {
+          console.error('Failed to upload file to WhatsApp API');
           setIsLoading(false);
           return;
         }
+         console.log('Successfully uploaded file to WhatsApp API. Media ID:', whatsappMediaId);
 
         // Determine WhatsApp message type based on file type
         let whatsappMessageType: 'image' | 'audio' | 'document' | 'video';
@@ -254,19 +258,20 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
           whatsappMessageType = 'document';
         }
 
-        // Construct the appropriate message payload based on file type
+        // Construct the appropriate message payload using the media ID
         messagePayload = {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to: selectedWaId || '',
           type: whatsappMessageType,
           [whatsappMessageType]: {
-            // WhatsApp API expects 'url' for media objects, not 'link'
-             url: uploadedFileUrl,
-             ...(whatsappMessageType === 'document' && { filename: file.name }),
-             ...(whatsappMessageType === 'image' && { caption: file.name }),
-             ...(whatsappMessageType === 'video' && { caption: file.name }),
-          } as any // Use 'any' temporarily if type still complains
+               // Use 'id' for media messages in the sending payload
+               id: whatsappMediaId,
+               // Optional: Add caption or filename if needed, WhatsApp API supports this in the message payload
+               ...(whatsappMessageType === 'image' && { caption: file.name }),
+               ...(whatsappMessageType === 'video' && { caption: file.name }),
+               ...(whatsappMessageType === 'document' && { filename: file.name }),
+          }
         } as WhatsAppMessage;
       }
 
@@ -283,15 +288,28 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
         content: messagePayload.type === 'text' 
           ? { text: { body: content as string } }
           : { [messagePayload.type]: { 
-              link: uploadedFileUrl || '',
-              ...(messagePayload.type === 'document' && { filename: (content as File).name }),
-              ...(messagePayload.type === 'image' && { caption: (content as File).name }),
-              ...(messagePayload.type === 'video' && { caption: (content as File).name }),
+               // For temporary display, we still need a URL. 
+               // We don't have the public Supabase URL yet at this point for outgoing messages.
+               // We could use a temporary client-side URL (like data URL) or a placeholder.
+               // For simplicity now, we'll use a placeholder and rely on Realtime update
+               // to show the actual media once the webhook processes the sent message.
+               // If immediate display is critical, consider a more complex client-side approach.
+               // Using the file name as a temporary identifier/placeholder:
+               name: (content as File).name, // Using 'name' as a temp placeholder field
+               // We can add a temporary local URL if needed for immediate display, e.g. URL.createObjectURL(file)
+               // tempLocalUrl: typeof content !== 'string' ? URL.createObjectURL(content) : undefined,
+               // Include the WhatsApp Media ID in the temporary message for potential client-side tracking
+               whatsappMediaId: whatsappMediaId,
             }
           }
       };
 
       setMessages(currentMessages => [...currentMessages, tempMessage]);
+
+       // TODO: Clean up temporary local URL if used for display later
+      // if (tempMessage.content?.[messagePayload.type]?.tempLocalUrl) {
+      //   URL.revokeObjectURL(tempMessage.content[messagePayload.type].tempLocalUrl);
+      // }
 
       // Send the message
       await whatsappApi.sendMessage(messagePayload);

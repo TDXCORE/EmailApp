@@ -531,6 +531,53 @@ export class WhatsAppAPI {
            return null;
        }
   }
+
+  // Helper function to upload media to WhatsApp Cloud API
+  async uploadMediaToWhatsApp(file: File): Promise<string | null> {
+    if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+        console.error('WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN is not set for uploading media.');
+        return null;
+    }
+
+    const formData = new FormData();
+    formData.append('messaging_product', 'whatsapp');
+    formData.append('file', file);
+    // WhatsApp API requires the 'type' parameter which is the MIME type
+     formData.append('type', file.type);
+
+    console.log('Uploading media to WhatsApp API...', file.name, file.type);
+
+    try {
+         // The WhatsApp API expects multipart/form-data for media uploads
+        const response = await fetch(`${BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/media`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                // Do NOT set Content-Type for FormData, fetch will set it automatically with boundary
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error('WhatsApp Media Upload Error: Response not OK', { 
+                status: response.status, 
+                statusText: response.statusText, 
+                errorBody: errorBody.substring(0, 500) 
+            });
+            return null;
+        }
+
+        const data = await response.json();
+        console.log('WhatsApp Media Upload Success Data:', data);
+         // The response contains the media ID
+        return data.id; 
+
+    } catch (error) {
+        console.error('Error uploading media to WhatsApp API:', error);
+        return null;
+    }
+}
 }
 
 export const whatsappApi = WhatsAppAPI.getInstance() 
