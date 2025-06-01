@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClientComponentClient, SupabaseClient } from '@supabase/auth-helpers-nextjs';
 
 interface Contact {
   id: string;
@@ -14,39 +14,16 @@ export default function WhatsAppPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
 
   useEffect(() => {
     console.log('useEffect in WhatsAppPage running'); // Log useEffect start
-    // Initialize Supabase client only in the browser
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    console.log('Checking NEXT_PUBLIC Supabase env vars in WhatsAppPage:', {
-      SUPABASE_URL: supabaseUrl ? '***SET***' : '***NOT SET***',
-      SUPABASE_ANON_KEY: supabaseAnonKey ? '***SET***' : '***NOT SET***',
-    });
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error("NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in WhatsAppPage.");
-      setError("Server configuration error: Missing Supabase public keys.");
-      setLoading(false);
-      return; 
-    }
-
-    let supabase: SupabaseClient;
-    try {
-      supabase = createClient(supabaseUrl, supabaseAnonKey);
-      console.log('Supabase client created successfully in WhatsAppPage');
-    } catch (e: any) {
-      console.error('Failed to create Supabase client in WhatsAppPage:', e);
-      setError(`Failed to initialize Supabase: ${e.message}`);
-      setLoading(false);
-      return;
-    }
+    console.log('Using Supabase client from auth-helpers in WhatsAppPage', supabase ? '***INITIALIZED***' : '***NOT INITIALIZED***');
 
     async function fetchContacts() {
       console.log('Fetching contacts from Supabase...'); // Log fetch start
       setLoading(true);
+      
       const { data, error } = await supabase
         .from('whatsapp_contacts')
         .select('id, wa_id, profile')
