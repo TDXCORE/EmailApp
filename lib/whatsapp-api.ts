@@ -417,14 +417,18 @@ export class WhatsAppAPI {
 
   // Helper function to fetch media URL from WhatsApp API
   private async fetchMediaUrl(mediaId: string): Promise<string | null> {
-      if (!WHATSAPP_ACCESS_TOKEN) {
-          console.error('WHATSAPP_ACCESS_TOKEN is not set for fetching media.');
+      if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_APP_SECRET) {
+          console.error('WHATSAPP_ACCESS_TOKEN or WHATSAPP_APP_SECRET is not set for fetching media.');
           return null;
       }
 
+      // Generate appsecret_proof for server-side API calls
+      const appSecretProof = generateAppSecretProof(WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET);
+
       console.log('Fetching media URL from WhatsApp API for ID:', mediaId);
       try {
-          const response = await fetch(`${BASE_URL}/${mediaId}`, {
+          // Include appsecret_proof in the GET request URL
+          const response = await fetch(`${BASE_URL}/${mediaId}?appsecret_proof=${appSecretProof}`, {
               headers: {
                   'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
               },
