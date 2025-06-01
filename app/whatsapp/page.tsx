@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { createClientComponentClient, SupabaseClient } from '@supabase/auth-helpers-nextjs';
+import ChatSidebar from '@/components/whatsapp/chat-sidebar';
+import ChatWindow from '@/components/whatsapp/chat-window';
 
 interface Contact {
   id: string;
@@ -14,6 +15,9 @@ export default function WhatsAppPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedWaId, setSelectedWaId] = useState<string | null>(null); // State to track selected conversation
+
+  // Get the Supabase client from auth-helpers
   const supabase = createClientComponentClient();
 
   useEffect(() => {
@@ -44,31 +48,10 @@ export default function WhatsAppPage() {
 
     fetchContacts();
 
-    // Optional: Set up real-time subscription for contacts list if needed
-    // (e.g., to automatically add new contacts to the list without refresh)
-    // const contactChannel = supabase
-    //   .channel('whatsapp_contacts_list')
-    //   .on(
-    //     'postgres_changes',
-    //     { event: 'INSERT', schema: 'public', table: 'whatsapp_contacts' },
-    //     (payload) => {
-    //       console.log('New contact received in realtime:', payload);
-    //       // Add the new contact to the state if it's not already there
-    //       setContacts((current) => {
-    //         if (!current.some(contact => contact.id === (payload.new as Contact).id)) {
-    //           return [payload.new as Contact, ...current];
-    //         }
-    //         return current;
-    //       });
-    //     }
-    //   )
-    //   .subscribe();
+    // Consider adding a real-time subscription here to automatically add new contacts
+    // to the list if a message is received from a new number.
 
-    // return () => {
-    //   supabase.removeChannel(contactChannel);
-    // };
-
-  }, []); // Empty dependency array means this runs once on mount
+  }, [supabase]); // Depend on supabase to ensure it's initialized
 
   if (loading) {
     return <div>Loading conversations...</div>;
@@ -79,31 +62,11 @@ export default function WhatsAppPage() {
   }
 
   return (
-    <div className="flex h-full">
-      {/* Conversations List Panel */}
-      <div className="w-80 border-r p-4 overflow-y-auto">
-        <h2 className="text-xl font-semibold mb-4">Conversations</h2>
-        {
-          contacts.length === 0 ? (
-            <p>No conversations yet.</p>
-          ) : (
-            <ul>
-              {contacts.map((contact) => (
-                <li key={contact.id} className="mb-2">
-                  <Link href={`/whatsapp/${contact.wa_id}`} className="block p-2 rounded hover:bg-gray-100">
-                    {contact.profile?.name || contact.wa_id} {/* Display name or wa_id */}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )
-        }
-      </div>
-
-      {/* Conversation View (Initially empty or a placeholder) */}
-      <div className="flex-1 p-4 flex items-center justify-center">
-        <p className="text-muted-foreground">Select a conversation from the left panel.</p>
-      </div>
+    <div className="flex h-full w-full">
+      {/* Pass contacts and the selection handler to ChatSidebar */}
+      <ChatSidebar contacts={contacts} onSelectConversation={setSelectedWaId} selectedWaId={selectedWaId} />
+      {/* Pass the selectedWaId to ChatWindow */}
+      <ChatWindow selectedWaId={selectedWaId} />
     </div>
   );
 } 

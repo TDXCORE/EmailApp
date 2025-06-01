@@ -1,12 +1,21 @@
 "use client"
-import { useState } from 'react'
+import { useState, Dispatch, SetStateAction } from 'react'
 import { Search } from 'lucide-react'
+import Link from 'next/link'
 
-const conversations = [
-  // Placeholder para futuras conversaciones
-]
+interface Contact {
+  id: string;
+  wa_id: string;
+  profile?: { name?: string };
+}
 
-export default function ChatSidebar() {
+interface ChatSidebarProps {
+  contacts: Contact[];
+  onSelectConversation: Dispatch<SetStateAction<string | null>>;
+  selectedWaId: string | null;
+}
+
+export default function ChatSidebar({ contacts, onSelectConversation, selectedWaId }: ChatSidebarProps) {
   const [search, setSearch] = useState('')
   return (
     <aside className="w-80 bg-white border-r border-gray-200 h-full flex flex-col">
@@ -22,11 +31,21 @@ export default function ChatSidebar() {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {conversations.length === 0 ? (
+        {contacts.length === 0 ? (
           <div className="text-center text-gray-400 mt-10 text-sm">No hay conversaciones</div>
         ) : (
-          // Aquí iría el mapeo de conversaciones
-          <></>
+          <ul>
+            {contacts.map((contact) => (
+              <li key={contact.id} className="mb-2">
+                <button
+                  className={`block w-full text-left p-2 rounded ${selectedWaId === contact.wa_id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+                  onClick={() => onSelectConversation(contact.wa_id)}
+                >
+                  {contact.profile?.name || contact.wa_id}
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </aside>
