@@ -171,6 +171,12 @@ export class WhatsAppAPI {
   }
 
   async handleWebhook(payload: any) {
+    // Add logging to check environment variables at runtime
+    console.log('Checking Supabase env vars in handleWebhook:', {
+      SUPABASE_URL: process.env.SUPABASE_URL ? '***SET***' : '***NOT SET***',
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? '***SET***' : '***NOT SET***',
+    });
+    
     // Initialize Supabase client inside the handler
     const supabase = this.getSupabaseClient();
     if (!supabase) {
