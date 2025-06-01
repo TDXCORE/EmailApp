@@ -6,6 +6,7 @@ import { whatsappApi } from '@/lib/whatsapp-api'
 import MessageInput from './message-input'
 import { WhatsAppMessage } from '@/lib/whatsapp-api'
 import { Contact } from '@/lib/whatsapp/types'
+import { supabase } from '@/lib/supabase'
 
 interface ChatWindowProps {
   selectedWaId: string | null
@@ -72,6 +73,55 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
       scrollToBottom()
     }
   }, [messages, selectedWaId])
+
+  useEffect(() => {
+    if (!selectedWaId) {
+      // ... handle no conversation selected
+      return;
+    }
+
+    const newChannel = supabase
+      .channel(`whatsapp_messages_${selectedWaId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'whatsapp_messages',
+          // TEMPORARILY REMOVE OR COMMENT OUT THE FILTER:
+          // filter: `from_number=eq.${selectedWaId} OR to_number=eq.${selectedWaId}`,
+        },
+        (payload) => {
+          console.log('Realtime INSERT (Simplified Listener) event triggered!', payload);
+          // You should see this log if INSERT events are reaching the client for this table
+          // Now you can process the payload to update your messages state
+          // ... your existing logic to add message to state ...
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'whatsapp_messages',
+           filter: `from_number=eq.${selectedWaId} OR to_number=eq.${selectedWaId}`, // Keep filter for UPDATE
+        },
+        (payload) => {
+           console.log('Realtime UPDATE event triggered!', payload);
+          // ... your existing logic to update message status ...
+        }
+      )
+      .subscribe();
+
+    console.log('Realtime subscription initiated for conversationId:', selectedWaId);
+    // This log should appear
+
+    return () => {
+      console.log('Cleaning up realtime subscription for conversationId:', selectedWaId);
+      supabase.removeChannel(newChannel); // Use removeChannel instead of removeSubscription
+    };
+
+  }, [selectedWaId, supabase, contacts]); // Dependencies should include conversationId, supabase, and contacts
 
   const handleSendMessage = async (content: string) => {
     setIsLoading(true)
