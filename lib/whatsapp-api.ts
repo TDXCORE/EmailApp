@@ -1,11 +1,21 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 const WHATSAPP_API_VERSION = 'v22.0'
 const WHATSAPP_PHONE_NUMBER_ID = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID
 const WHATSAPP_ACCESS_TOKEN = process.env.NEXT_PUBLIC_WHATSAPP_ACCESS_TOKEN
 const WHATSAPP_WEBHOOK_TOKEN = process.env.NEXT_PUBLIC_WHATSAPP_WEBHOOK_TOKEN
+const WHATSAPP_APP_SECRET = process.env.NEXT_PUBLIC_WHATSAPP_APP_SECRET
 
 const BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`
+
+// Function to generate appsecret_proof
+const generateAppSecretProof = (accessToken: string, appSecret: string) => {
+  return crypto
+    .createHmac('sha256', appSecret)
+    .update(accessToken)
+    .digest('hex')
+}
 
 export interface WhatsAppMessage {
   messaging_product: 'whatsapp'
@@ -102,6 +112,7 @@ export class WhatsAppAPI {
       phoneNumberId: WHATSAPP_PHONE_NUMBER_ID ? '***SET***' : '***NOT SET***',
       accessToken: WHATSAPP_ACCESS_TOKEN ? '***SET***' : '***NOT SET***',
       webhookToken: WHATSAPP_WEBHOOK_TOKEN ? '***SET***' : '***NOT SET***',
+      appSecret: WHATSAPP_APP_SECRET ? '***SET***' : '***NOT SET***',
       apiVersion: WHATSAPP_API_VERSION,
       baseUrl: BASE_URL
     });
@@ -137,9 +148,12 @@ export class WhatsAppAPI {
   async sendMessage(message: WhatsAppMessage) {
     try {
       // Validate required environment variables
-      if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+      if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_APP_SECRET) {
         throw new Error('Missing required WhatsApp environment variables');
       }
+
+      // Generate appsecret_proof
+      const appSecretProof = generateAppSecretProof(WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET);
 
       // Log the request details (excluding sensitive data)
       console.log('Sending WhatsApp message:', {
@@ -149,7 +163,7 @@ export class WhatsAppAPI {
         apiVersion: WHATSAPP_API_VERSION
       });
 
-      const response = await fetch(`${BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+      const response = await fetch(`${BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages?appsecret_proof=${appSecretProof}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
