@@ -94,7 +94,7 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
           filter: `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`,
         },
         (payload) => {
-          console.log('Realtime INSERT event triggered!');
+          console.log('Realtime INSERT event triggered (postgres_changes)! For conversationId:', conversationId);
           console.log('Realtime INSERT payload:', payload);
           const newMessage = payload.new as WhatsAppRealtimeMessage;
 
