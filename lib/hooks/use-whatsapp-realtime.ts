@@ -85,6 +85,20 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
     console.log('Realtime subscription filter:', filterString);
     const newChannel = supabase
       .channel(`whatsapp_messages_${conversationId}`)
+      // Removed problematic generic '*' listener
+      // .on(
+      //   '*', // Listen for all events on the channel for basic connection diagnostics
+      //   (event: any) => {
+      //     console.log('Realtime Channel State Event:', event);
+      //   }
+      // )
+      // Add listeners for specific channel events
+      .on('SUBSCRIBE', () => {
+        console.log('Realtime Channel SUBSCRIBED!', { conversationId });
+      })
+      .on('ERROR', (err: any) => {
+        console.error('Realtime Channel ERROR:', { conversationId, error: err });
+      })
       .on(
         'postgres_changes',
         {
