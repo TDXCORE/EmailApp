@@ -31,6 +31,14 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
   const userPhoneNumberId = whatsappApi.phoneNumberId;
   console.log('useWhatsAppRealtime - User Phone Number ID:', userPhoneNumberId);
 
+  // Add a check and warning if phoneNumberId is undefined
+  useEffect(() => {
+    if (userPhoneNumberId === undefined) {
+      console.warn('useWhatsAppRealtime: WhatsApp Phone Number ID is undefined. Real-time features may not work correctly.');
+      console.warn('Please ensure NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID is set in your environment variables.');
+    }
+  }, [userPhoneNumberId]); // Dependency array includes userPhoneNumberId
+
   useEffect(() => {
     console.log('useEffect in useWhatsAppRealtime running for conversationId:', conversationId);
 
@@ -96,7 +104,7 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
       .on('SUBSCRIBE', () => {
         console.log('Realtime Channel SUBSCRIBED!', { conversationId });
       })
-      .on('ERROR', (err: any) => {
+      .on('ERROR', (err) => {
         console.error('Realtime Channel ERROR:', { conversationId, error: err });
       })
       .on(

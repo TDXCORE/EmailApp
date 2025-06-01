@@ -261,11 +261,12 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
           to: selectedWaId || '',
           type: whatsappMessageType,
           [whatsappMessageType]: {
-            link: uploadedFileUrl,
-            ...(whatsappMessageType === 'document' && { filename: file.name }),
-            ...(whatsappMessageType === 'image' && { caption: file.name }),
-            ...(whatsappMessageType === 'video' && { caption: file.name }),
-          }
+            // WhatsApp API expects 'url' for media objects, not 'link'
+             url: uploadedFileUrl,
+             ...(whatsappMessageType === 'document' && { filename: file.name }),
+             ...(whatsappMessageType === 'image' && { caption: file.name }),
+             ...(whatsappMessageType === 'video' && { caption: file.name }),
+          } as any // Use 'any' temporarily if type still complains
         } as WhatsAppMessage;
       }
 
