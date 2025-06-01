@@ -1,3 +1,6 @@
+// Add 'use client' directive
+'use client';
+
 import { useWhatsAppRealtime, WhatsAppRealtimeMessage } from '@/lib/hooks/use-whatsapp-realtime';
 import { useParams } from 'next/navigation'; // Use useParams for dynamic routes in client components
 import { useEffect, useRef } from 'react';
