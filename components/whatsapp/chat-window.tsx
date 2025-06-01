@@ -75,6 +75,11 @@ const MessageBubble = ({ message, contact }: { message: WhatsAppRealtimeMessage;
              {message.content.video.caption && <p className="mt-1 text-sm">{message.content.video.caption}</p>}
            </div>
         )}
+        {message.type === 'sticker' && message.content?.sticker?.link && (
+           <div>
+             <img src={message.content.sticker.link} alt="Sticker" className="max-w-[150px] rounded-md" />
+           </div>
+        )}
         {/* Add other message types here if needed (e.g., sticker, location) */}
 
         {/* Timestamp and Status */}
