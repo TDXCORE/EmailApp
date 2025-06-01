@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Send, Paperclip, Smile, MapPin, User } from 'lucide-react'
 
 interface MessageInputProps {
-  onSend: (message: string) => void
+  onSend: (message: string | File) => void
   isLoading?: boolean
 }
 
@@ -20,10 +20,11 @@ export default function MessageInput({ onSend, isLoading }: MessageInputProps) {
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.preventDefault(); // Prevent default form submission
     const file = event.target.files?.[0];
     if (file) {
       console.log('Selected file:', file);
-      // TODO: Add file upload and sending logic here
+      onSend(file); // Send the file directly to parent component
     }
     // Clear the file input value so the same file can be selected again
     event.target.value = '';
@@ -48,6 +49,7 @@ export default function MessageInput({ onSend, isLoading }: MessageInputProps) {
           id="fileInput"
           className="hidden"
           onChange={handleFileChange}
+          accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
         />
         <label htmlFor="fileInput" className="cursor-pointer p-2 hover:bg-gray-200 rounded-full focus:outline-none text-gray-500" title="Adjuntar archivo">
           <Paperclip className="w-6 h-6" />

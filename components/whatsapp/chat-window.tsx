@@ -187,7 +187,7 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
 
     try {
       const { error: uploadError } = await supabase.storage
-        .from('whatsapp-media') // Replace with your Supabase storage bucket name
+        .from('whatsappt-multimedia') // Corrected bucket name
         .upload(filePath, file);
 
       if (uploadError) {
@@ -195,12 +195,10 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
         return null;
       }
 
-      // Get the public URL of the uploaded file
       const { data } = supabase.storage
-        .from('whatsapp-media')
+        .from('whatsappt-multimedia') // Corrected bucket name
         .getPublicUrl(filePath);
 
-      // getPublicUrl typically returns data with publicUrl or throws/returns null on failure
        if (!data?.publicUrl) {
            console.error('Error getting public URL: Public URL not found.');
            return null; 
@@ -218,7 +216,7 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
     setIsLoading(true)
     try {
       let messagePayload: WhatsAppMessage;
-      let uploadedFileUrl: string | null = null; // Declare uploadedFileUrl here
+      let uploadedFileUrl: string | null = null;
 
       if (typeof content === 'string') {
         // Handle text message
@@ -232,78 +230,78 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
           },
         };
       } else {
-        // Handle file message (image, audio, document, video)
+        // Handle file message
         const file = content;
         const fileType = file.type.split('/')[0]; // Get the main type (image, audio, video, application)
 
-        uploadedFileUrl = await uploadFile(file); // Assign to the declared variable
-
-        if (!uploadedFileUrl) { // Don't send if upload failed
-            setIsLoading(false);
-            return; 
+        // Upload file to Supabase Storage
+        uploadedFileUrl = await uploadFile(file);
+        if (!uploadedFileUrl) {
+          console.error('Failed to upload file');
+          setIsLoading(false);
+          return;
         }
 
         // Determine WhatsApp message type based on file type
         let whatsappMessageType: 'image' | 'audio' | 'document' | 'video';
         if (fileType === 'image') {
-            whatsappMessageType = 'image';
+          whatsappMessageType = 'image';
         } else if (fileType === 'audio') {
-            whatsappMessageType = 'audio';
+          whatsappMessageType = 'audio';
         } else if (fileType === 'video') {
-            whatsappMessageType = 'video';
+          whatsappMessageType = 'video';
         } else {
-            whatsappMessageType = 'document'; // Treat other types as documents
+          whatsappMessageType = 'document';
         }
 
+        // Construct the appropriate message payload based on file type
         messagePayload = {
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: selectedWaId || '',
-            type: whatsappMessageType,
-            [whatsappMessageType]: { // Dynamically add the property based on type
-                link: uploadedFileUrl,
-                filename: file.name, // for document
-            }
-        } as WhatsAppMessage; // Cast to WhatsAppMessage
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: selectedWaId || '',
+          type: whatsappMessageType,
+          [whatsappMessageType]: {
+            link: uploadedFileUrl,
+            ...(whatsappMessageType === 'document' && { filename: file.name }),
+            ...(whatsappMessageType === 'image' && { caption: file.name }),
+            ...(whatsappMessageType === 'video' && { caption: file.name }),
+          }
+        } as WhatsAppMessage;
       }
 
-      // Add the sent message to the local state immediately *before* sending
-      // to give immediate feedback, then update status based on real-time.
-       const tempMessage: WhatsAppRealtimeMessage = {
-        id: Date.now().toString(), // Temporary client-side ID
-        message_id: '', // This will be updated by the real-time listener
-        from_number: whatsappApi.phoneNumberId as string, // Our number is the sender
+      // Add temporary message to state before sending
+      const tempMessage: WhatsAppRealtimeMessage = {
+        id: Date.now().toString(),
+        message_id: '',
+        from_number: whatsappApi.phoneNumberId as string,
         to_number: selectedWaId || '',
-        type: messagePayload.type, // Use the determined WhatsApp message type
-        status: 'pending', // Initial status is pending
+        type: messagePayload.type,
+        status: 'pending',
         created_at: new Date().toISOString(),
         isOutgoing: true,
-        // Structure content based on the message type and available data
-         content: messagePayload.type === 'text' 
-            ? { text: { body: content as string } }
-            : uploadedFileUrl !== null // Check if uploadedFileUrl is available for file types
-              ? { [messagePayload.type]: { link: uploadedFileUrl, filename: typeof content !== 'string' ? content.name : undefined } } 
-              : undefined // Or handle the case where URL is missing (shouldn't happen if uploadFile returns null)
+        content: messagePayload.type === 'text' 
+          ? { text: { body: content as string } }
+          : { [messagePayload.type]: { 
+              link: uploadedFileUrl || '',
+              ...(messagePayload.type === 'document' && { filename: (content as File).name }),
+              ...(messagePayload.type === 'image' && { caption: (content as File).name }),
+              ...(messagePayload.type === 'video' && { caption: (content as File).name }),
+            }
+          }
       };
 
-       // Only add temp message if it has valid content structure
-       if (tempMessage.content) {
-            setMessages(currentMessages => [...currentMessages, tempMessage]);
-       } else {
-           console.error('Failed to create temporary message due to missing content structure.');
-           setIsLoading(false); // Ensure loading state is reset if temp message fails
-           return; // Stop here if temp message cannot be created correctly
-       }
+      setMessages(currentMessages => [...currentMessages, tempMessage]);
 
-      await whatsappApi.sendMessage(messagePayload) // Send the message *after* adding temp message to state
+      // Send the message
+      await whatsappApi.sendMessage(messagePayload);
 
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error('Error sending message:', error);
       // TODO: Handle error state in UI, potentially remove temp message or mark as failed
-       // For simplicity, just reset loading for now
-       setIsLoading(false);
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
   // Modify MessageInput onSend to handle files
   const handleMessageInputSend = (input: string | File) => {
