@@ -98,6 +98,13 @@ export interface WhatsAppMessage {
     language: {
       code: string
     }
+    components?: Array<{
+      type: string
+      parameters: Array<{
+        type: string
+        text: string
+      }>
+    }>
   }
 }
 
