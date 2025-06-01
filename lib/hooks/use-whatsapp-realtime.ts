@@ -81,6 +81,8 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
     fetchMessages()
 
     console.log('Subscribing to new messages for conversationId:', conversationId);
+    const filterString = `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`;
+    console.log('Realtime subscription filter:', filterString);
     const newChannel = supabase
       .channel(`whatsapp_messages_${conversationId}`)
       .on(
