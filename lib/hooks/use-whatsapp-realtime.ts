@@ -92,6 +92,7 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
           filter: `from_number=eq.${conversationId} OR to_number=eq.${conversationId}`,
         },
         (payload) => {
+          console.log('Realtime INSERT event triggered!');
           console.log('Realtime INSERT payload:', payload);
           const newMessage = payload.new as WhatsAppRealtimeMessage;
 
@@ -99,14 +100,16 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
           const contact = contacts.find(c => c.wa_id === newMessage.from_number);
           // Determine if outgoing for real-time message
           const isOutgoing = newMessage.from_number === userPhoneNumberId;
-          console.log('Realtime INSERT Message:', { from_number: newMessage.from_number, userPhoneNumberId, isOutgoing });
+          console.log('Realtime INSERT Message:', { from_number: newMessage.from_number, userPhoneNumberId, isOutgoing, messageContent: newMessage.content });
           const newMessageWithContact = { ...newMessage, contact, isOutgoing };
 
           setMessages(currentMessages => {
             // Avoid duplicates if realtime sends existing messages on subscribe/reconnect
             if (currentMessages.find(msg => msg.id === newMessageWithContact.id)) {
+              console.log('Realtime INSERT: Message already exists, skipping.', newMessageWithContact.id);
               return currentMessages;
             }
+            console.log('Realtime INSERT: Adding new message.', newMessageWithContact);
             const updatedMessages = [...currentMessages, newMessageWithContact];
             // Sort messages by timestamp to ensure correct order
             updatedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -128,6 +131,7 @@ export function useWhatsAppRealtime(conversationId?: string, contacts: Contact[]
            // Find and attach contact to the updated message (important for initial fetch updates)
           const contact = contacts.find(c => c.wa_id === updatedMessage.from_number);
           const updatedMessageWithContact = { ...updatedMessage, contact };
+          console.log('Realtime UPDATE Message:', { id: updatedMessageWithContact.id, status: updatedMessageWithContact.status }); // Log update details
           setMessages(currentMessages =>
             currentMessages.map((msg) =>
               msg.id === updatedMessageWithContact.id ? updatedMessageWithContact : msg
