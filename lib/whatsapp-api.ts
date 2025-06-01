@@ -131,7 +131,10 @@ export class WhatsAppAPI {
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to send message: ${response.statusText}`)
+        // Log detailed error response from WhatsApp API
+        const errorBody = await response.text(); // Read response body as text
+        console.error(`WhatsApp API responded with status ${response.status}: ${errorBody}`);
+        throw new Error(`Failed to send message: ${response.statusText || response.status} - ${errorBody}`);
       }
 
       const data = await response.json()
