@@ -432,7 +432,12 @@ export class WhatsAppAPI {
 
           if (!response.ok) {
               const errorBody = await response.text();
-              console.error('WhatsApp Media Fetch Error:', { status: response.status, statusText: response.statusText, errorBody, mediaId });
+              console.error('WhatsApp Media Fetch Error: Response not OK', { 
+                  status: response.status, 
+                  statusText: response.statusText, 
+                  errorBody: errorBody.substring(0, 500), // Log a part of the body to avoid flooding logs
+                  mediaId 
+              });
               return null;
           }
 
@@ -441,7 +446,7 @@ export class WhatsAppAPI {
           return data.url; // The URL to download the media
 
       } catch (error) {
-          console.error('Error fetching media URL from WhatsApp API:', error);
+          console.error('Error fetching media URL from WhatsApp API:', error, { mediaId });
           return null;
       }
   }
