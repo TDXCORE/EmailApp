@@ -39,7 +39,29 @@ export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
   const handleSendMessage = async (content: string) => {
     setIsLoading(true)
     try {
-      const message: WhatsAppMessage = {
+      // First try to send a template message
+      const templateMessage: WhatsAppMessage = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: selectedWaId || '',
+        type: 'template',
+        template: {
+          name: 'hello_world',
+          language: {
+            code: 'en_US'
+          }
+        }
+      }
+
+      console.log('Sending template message:', {
+        to: selectedWaId,
+        template: 'hello_world'
+      });
+
+      await whatsappApi.sendMessage(templateMessage)
+
+      // If template message succeeds, also send the text message
+      const textMessage: WhatsAppMessage = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: selectedWaId || '',
@@ -49,7 +71,7 @@ export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
         },
       }
 
-      await whatsappApi.sendMessage(message)
+      await whatsappApi.sendMessage(textMessage)
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {

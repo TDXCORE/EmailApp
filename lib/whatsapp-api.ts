@@ -1,9 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const WHATSAPP_API_VERSION = 'v18.0'
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
-const WHATSAPP_WEBHOOK_TOKEN = process.env.WHATSAPP_WEBHOOK_TOKEN
+const WHATSAPP_API_VERSION = 'v22.0'
+const WHATSAPP_PHONE_NUMBER_ID = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID
+const WHATSAPP_ACCESS_TOKEN = process.env.NEXT_PUBLIC_WHATSAPP_ACCESS_TOKEN
+const WHATSAPP_WEBHOOK_TOKEN = process.env.NEXT_PUBLIC_WHATSAPP_WEBHOOK_TOKEN
 
 const BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`
 
@@ -11,7 +11,7 @@ export interface WhatsAppMessage {
   messaging_product: 'whatsapp'
   recipient_type: 'individual'
   to: string
-  type: 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'location' | 'contacts' | 'interactive' | 'reaction'
+  type: 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'location' | 'contacts' | 'interactive' | 'reaction' | 'template'
   text?: {
     preview_url?: boolean
     body: string
@@ -83,6 +83,12 @@ export interface WhatsAppMessage {
     message_id: string
     emoji: string
   }
+  template?: {
+    name: string
+    language: {
+      code: string
+    }
+  }
 }
 
 export class WhatsAppAPI {
@@ -90,7 +96,16 @@ export class WhatsAppAPI {
   // Remove top-level supabase client initialization
   // private supabase = createClient(...) 
 
-  private constructor() {}
+  private constructor() {
+    // Debug environment variables
+    console.log('WhatsApp API Environment Variables:', {
+      phoneNumberId: WHATSAPP_PHONE_NUMBER_ID ? '***SET***' : '***NOT SET***',
+      accessToken: WHATSAPP_ACCESS_TOKEN ? '***SET***' : '***NOT SET***',
+      webhookToken: WHATSAPP_WEBHOOK_TOKEN ? '***SET***' : '***NOT SET***',
+      apiVersion: WHATSAPP_API_VERSION,
+      baseUrl: BASE_URL
+    });
+  }
 
   static getInstance(): WhatsAppAPI {
     if (!WhatsAppAPI.instance) {
@@ -121,6 +136,19 @@ export class WhatsAppAPI {
 
   async sendMessage(message: WhatsAppMessage) {
     try {
+      // Validate required environment variables
+      if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+        throw new Error('Missing required WhatsApp environment variables');
+      }
+
+      // Log the request details (excluding sensitive data)
+      console.log('Sending WhatsApp message:', {
+        to: message.to,
+        type: message.type,
+        phoneNumberId: WHATSAPP_PHONE_NUMBER_ID,
+        apiVersion: WHATSAPP_API_VERSION
+      });
+
       const response = await fetch(`${BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
         method: 'POST',
         headers: {
@@ -131,19 +159,26 @@ export class WhatsAppAPI {
       })
 
       if (!response.ok) {
-        // Log detailed error response from WhatsApp API
-        const errorBody = await response.text(); // Read response body as text
-        console.error(`WhatsApp API responded with status ${response.status}: ${errorBody}`);
-        throw new Error(`Failed to send message: ${response.statusText || response.status} - ${errorBody}`);
+        const errorBody = await response.text();
+        console.error('WhatsApp API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorBody,
+          url: `${BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`
+        });
+        throw new Error(`Failed to send message: ${response.status} - ${errorBody}`);
       }
 
       const data = await response.json()
+      console.log('WhatsApp API Success:', {
+        messageId: data.messages?.[0]?.id,
+        status: 'sent'
+      });
       
-      // Store message in Supabase - need to get client here too or refactor
+      // Store message in Supabase
       const supabase = this.getSupabaseClient();
       if (!supabase) {
         console.error("Supabase client not available to store sent message.");
-        // Decide how to handle this error - maybe throw or return a specific status
         throw new Error("Database connection not configured.");
       }
 
