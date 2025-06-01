@@ -36,6 +36,12 @@ export interface WhatsAppMessage {
   isOutgoing: boolean
 }
 
+export interface Contact {
+  id: string;
+  wa_id: string;
+  profile?: { name?: string };
+}
+
 export interface WhatsAppConversation {
   id: string
   contactId: string

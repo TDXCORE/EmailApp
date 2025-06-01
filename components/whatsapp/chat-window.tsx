@@ -5,23 +5,60 @@ import { useWhatsAppRealtime, WhatsAppRealtimeMessage } from '@/lib/hooks/use-wh
 import { whatsappApi } from '@/lib/whatsapp-api'
 import MessageInput from './message-input'
 import { WhatsAppMessage } from '@/lib/whatsapp-api'
+import { Contact } from '@/lib/whatsapp/types'
 
 interface ChatWindowProps {
   selectedWaId: string | null
+  contacts: Contact[]
 }
 
-const MessageBubble = ({ message, isSent }: { message: WhatsAppRealtimeMessage, isSent: boolean }) => {
+const MessageBubble = ({ message, contact }: { message: WhatsAppRealtimeMessage; contact?: Contact }) => {
+  const isSent = message.isOutgoing;
+
+  // Function to format timestamp (e.g., "3:51 PM")
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  // Function to determine checkmark icon based on status
+  const getStatusIcon = (status: WhatsAppRealtimeMessage['status']) => {
+    switch (status) {
+      case 'delivered':
+      case 'read':
+        return <span className="text-blue-500">✔✔</span>; // Double checkmark for delivered/read
+      case 'sent':
+        return <span className="text-gray-500">✔</span>; // Single checkmark for sent
+      default:
+        return null; // No icon for other statuses (e.g., pending, failed)
+    }
+  };
+
   return (
-    <div className={`flex ${isSent ? 'justify-end' : 'justify-start'}`}>
-      <div className={`rounded-lg p-2 ${isSent ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}>
-        {message.content.text?.body || '...'}
+    <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} items-end`}>
+      {!isSent && contact && (
+        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-semibold text-sm mr-2">
+          {/* Display first letter of contact name if available */}
+          {contact.profile?.name ? contact.profile.name.charAt(0).toUpperCase() : ''}
+        </div>
+      )}
+      <div className={`rounded-lg p-2 max-w-[70%] ${isSent ? 'bg-green-100 text-gray-800' : 'bg-white text-gray-800'} shadow-sm`}>
+        {/* Message Content */}
+        {message.type === 'text' && message.content?.text?.body}
+        {/* Add other message types here if needed (e.g., image, video) */}
+
+        {/* Timestamp and Status */}
+        <div className={`text-[10px] mt-1 ${isSent ? 'text-gray-600 text-right' : 'text-gray-500 text-left'}`}>
+          {formatTimestamp(message.created_at)}
+          {isSent && <span className="ml-1">{getStatusIcon(message.status)}</span>}
+        </div>
       </div>
     </div>
   );
 };
 
-export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
-  const { messages, setMessages } = useWhatsAppRealtime(selectedWaId || undefined)
+export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) {
+  const { messages, setMessages } = useWhatsAppRealtime(selectedWaId || undefined, contacts)
   const [isLoading, setIsLoading] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -55,7 +92,6 @@ export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
       const tempMessage: WhatsAppRealtimeMessage = {
         id: Date.now().toString(), // Temporary client-side ID
         message_id: '', // This will be updated by the real-time listener
-        conversationId: selectedWaId || '',
         from_number: selectedWaId || '', // Outgoing messages show *from* the selected contact in this view
         to_number: whatsappApi.phoneNumberId as string, // Our number is the recipient of the outgoing message in terms of DB storage
         type: 'text',
@@ -83,14 +119,13 @@ export default function ChatWindow({ selectedWaId }: ChatWindowProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full p-4">
-      <h2 className="text-xl font-semibold mb-4">Conversation with {selectedWaId}</h2>
-      <div className="flex-1 overflow-y-auto space-y-2">
+    <div className="flex-1 flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {messages.length === 0 ? (
           <p>No messages yet.</p>
         ) : (
           messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} isSent={msg.from_number !== selectedWaId} />
+            <MessageBubble key={msg.id} message={msg} contact={msg.contact} />
           ))
         )}
         <div ref={messagesEndRef} />

@@ -4,12 +4,8 @@ import { useEffect, useState } from 'react';
 import { createClientComponentClient, SupabaseClient } from '@supabase/auth-helpers-nextjs';
 import ChatSidebar from '@/components/whatsapp/chat-sidebar';
 import ChatWindow from '@/components/whatsapp/chat-window';
-
-interface Contact {
-  id: string;
-  wa_id: string;
-  profile?: { name?: string };
-}
+import ChatHeader from '@/components/whatsapp/chat-header';
+import { Contact } from '@/lib/whatsapp/types';
 
 export default function WhatsAppPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -65,8 +61,25 @@ export default function WhatsAppPage() {
     <div className="flex h-full w-full">
       {/* Pass contacts and the selection handler to ChatSidebar */}
       <ChatSidebar contacts={contacts} onSelectConversation={setSelectedWaId} selectedWaId={selectedWaId} />
-      {/* Pass the selectedWaId to ChatWindow */}
-      <ChatWindow selectedWaId={selectedWaId} />
+
+      {/* Right panel: Header and Chat Window */}
+      <div className="flex flex-col flex-1 h-full">
+        {/* Find the selected contact to pass name to header */}
+        {selectedWaId ? (
+          (() => {
+            const selectedContact = contacts.find(contact => contact.wa_id === selectedWaId);
+            const contactName = selectedContact?.profile?.name || selectedWaId;
+            return <ChatHeader contactName={contactName} />;
+          })()
+        ) : (
+          <div className="flex items-center justify-center h-16 bg-white border-b border-gray-200 shadow-sm">
+             <h3 className="text-lg font-semibold text-gray-500">Select a conversation</h3>
+          </div>
+        )}
+
+        {/* Pass the selectedWaId and contacts to ChatWindow */}
+        <ChatWindow selectedWaId={selectedWaId} contacts={contacts} />
+      </div>
     </div>
   );
 } 
