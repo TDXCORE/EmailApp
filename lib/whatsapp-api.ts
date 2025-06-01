@@ -249,83 +249,282 @@ export class WhatsAppAPI {
       throw new Error("Server configuration error: Database connection missing for webhook.");
     }
 
-    console.log('Received webhook payload:', JSON.stringify(payload, null, 2));
     try {
-      const { object, entry } = payload
+      // Process incoming messages from the payload
+      const entries = payload.entry;
+      for (const entry of entries) {
+        // Ensure there are changes and that they are related to messages
+        if (!entry.changes || !Array.isArray(entry.changes)) continue; 
 
-      if (object !== 'whatsapp_business_account') {
-        console.log('Payload object is not whatsapp_business_account, ignoring.');
-        return
-      }
-
-      for (const entryItem of entry) {
-        console.log('Processing entry item:', JSON.stringify(entryItem, null, 2));
-        const { changes } = entryItem
-        for (const change of changes) {
-          console.log('Processing change:', JSON.stringify(change, null, 2));
+        for (const change of entry.changes) {
           if (change.field === 'messages') {
-            console.log('Found messages change.');
-            const { value } = change
-            console.log('Messages value:', JSON.stringify(value, null, 2));
-            const { messages, contacts } = value
+            const messages = change.value.messages;
+             // Ensure there are messages
+             if (!messages || !Array.isArray(messages) || messages.length === 0) continue;
 
-            if (messages && messages.length > 0) {
-              for (const message of messages) {
-                console.log('Processing message:', JSON.stringify(message, null, 2));
-                
-                // Extract the 'to' number from metadata for incoming messages
-                const toPhoneNumber = value.metadata.phone_number_id;
+            for (const incomingMessage of messages) {
+              const messageType = incomingMessage.type;
+              let contentToStore: any = null; // Initialize content to store
+              let storedMessageType = messageType;
 
-                // Store incoming message in Supabase
-                const { data, error } = await supabase
-                  .from('whatsapp_messages')
-                  .insert({
-                    message_id: message.id,
-                    from_number: message.from,
-                    to_number: toPhoneNumber, // Use the extracted 'to' number
-                    type: message.type,
-                    content: message,
-                    status: 'received',
-                    created_at: new Date().toISOString(),
-                  })
+              console.log('Processing incoming message type:', messageType);
+              console.log('Incoming message details:', incomingMessage); // Log full incoming message
 
-                if (error) {
-                  console.error('Error inserting incoming message into Supabase:', error);
-                } else {
-                  console.log('Successfully inserted incoming message:', data);
-                }
+              // Handle different message types for storage
+              if (messageType === 'text') {
+                contentToStore = { text: { body: incomingMessage.text?.body } };
+              } else if (['image', 'audio', 'video', 'document', 'sticker'].includes(messageType)) {
+                 const mediaId = incomingMessage[messageType]?.id;
+                 const caption = incomingMessage[messageType]?.caption; // Get caption for media/video
+                 const filename = incomingMessage[messageType]?.filename; // Get filename for document
 
-                // Store contact if new
-                if (contacts && contacts.length > 0) {
-                  const contact = contacts[0]
-                  console.log('Processing contact:', JSON.stringify(contact, null, 2));
-                  const { data: contactData, error: contactError } = await supabase
-                    .from('whatsapp_contacts')
-                    .upsert({
-                      wa_id: contact.wa_id,
-                      profile: {
-                        name: contact.profile?.name,
-                      },
-                      updated_at: new Date().toISOString(),
-                    }, { onConflict: 'wa_id' })
-                    
-                  if (contactError) {
-                    console.error('Error upserting contact into Supabase:', contactError);
-                  } else {
-                    console.log('Successfully upserted contact:', contactData);
-                  }
-                }
+                 console.log(`Incoming ${messageType} message. Media ID: ${mediaId}, Caption: ${caption}, Filename: ${filename}`);
+
+                 if (mediaId) {
+                     console.log(`Attempting to fetch media URL for ID: ${mediaId}`);
+                     const mediaUrl = await this.fetchMediaUrl(mediaId);
+                     console.log(`Fetched media URL: ${mediaUrl}`);
+
+                     if (mediaUrl) {
+                         console.log(`Attempting to upload media from URL: ${mediaUrl} to Supabase`);
+                         const uploadedUrl = await this.uploadMediaToSupabase(mediaUrl, mediaId, messageType);
+                         console.log(`Supabase uploaded URL: ${uploadedUrl}`);
+
+                         if (uploadedUrl) {
+                            // Structure the content to match MessageBubble expectations
+                             contentToStore = {
+                                 [messageType]: {
+                                     link: uploadedUrl,
+                                     ...(caption && { caption }), // Add caption if it exists
+                                     ...(filename && { filename }), // Add filename if it exists
+                                     // WhatsApp may provide a mime_type and sha256 for verification
+                                      ...(incomingMessage[messageType]?.mime_type && { mime_type: incomingMessage[messageType].mime_type }),
+                                      ...(incomingMessage[messageType]?.sha256 && { sha256: incomingMessage[messageType].sha256 }),
+                                      ...(incomingMessage[messageType]?.id && { id: incomingMessage[messageType].id }), // Keep original media ID
+                                 }
+                             };
+                             storedMessageType = messageType; // Store the original type
+                             console.log('Content structured for storage:', contentToStore);
+                         } else {
+                             console.error('Failed to upload media to Supabase for ID:', mediaId);
+                             contentToStore = { text: { body: `[Error: Failed to process ${messageType}]` } };
+                             storedMessageType = 'text';
+                         }
+                     } else {
+                         console.error('Failed to fetch media URL for ID:', mediaId);
+                          contentToStore = { text: { body: `[Error: Could not retrieve ${messageType} URL]` } };
+                         storedMessageType = 'text';
+                     }
+                 } else {
+                      console.warn(`Incoming ${messageType} message is missing ID:`, incomingMessage);
+                       contentToStore = { text: { body: `[Error: Received ${messageType} without ID]` } };
+                       storedMessageType = 'text';
+                 }
+              } else if (messageType === 'reaction') {
+                  // Handle reactions - typically don't need to display as a separate bubble but save
+                  console.log('Received reaction message:', incomingMessage);
+                   // Store the reaction details
+                   contentToStore = { reaction: { message_id: incomingMessage.reaction.message_id, emoji: incomingMessage.reaction.emoji } };
+                   storedMessageType = 'reaction';
+              } else {
+                // Handle other message types or store the raw content
+                console.warn('Received message of unhandled type:', messageType, incomingMessage);
+                contentToStore = incomingMessage[messageType]; // Store the raw content for inspection
+                storedMessageType = messageType; // Store the original type
               }
-            } else {
-              console.log('No messages found in the change value.');
+
+              // Only attempt to save if contentToStore is not null
+               if (contentToStore !== null) {
+                  // Determine the status of the incoming message
+                   const messageStatus = 'received'; // Incoming messages are initially received
+
+                  // Save the processed message to Supabase
+                  console.log('Saving message to Supabase:', { message_id: incomingMessage.id, from_number: incomingMessage.from, type: storedMessageType, status: messageStatus, content: contentToStore });
+
+                  const { error: insertError } = await supabase
+                    .from('whatsapp_messages')
+                    .insert({
+                      message_id: incomingMessage.id,
+                      from_number: incomingMessage.from,
+                      to_number: change.value.metadata.phone_number_id, // Our phone number ID
+                      type: storedMessageType, // Use the determined stored type
+                      content: contentToStore, // Store the processed content
+                      status: messageStatus,
+                      created_at: new Date(parseInt(incomingMessage.timestamp, 10) * 1000).toISOString(), // Convert timestamp to ISO string
+                    });
+
+                  if (insertError) {
+                    console.error('Error saving incoming message to Supabase:', insertError);
+                  } else {
+                      console.log('Successfully saved incoming message to Supabase.', incomingMessage.id);
+                  }
+               } else {
+                   console.error('Skipping save for incoming message due to null content:', incomingMessage);
+               }
             }
+             // TODO: Handle changes.value.statuses for message status updates
+             if (change.value.statuses && Array.isArray(change.value.statuses)) {
+                 for (const statusUpdate of change.value.statuses) {
+                     console.log('Received status update:', statusUpdate);
+                      // Find the message in the database by message_id and update its status
+                     const { data: updatedMessages, error: updateError } = await supabase
+                         .from('whatsapp_messages')
+                         .update({ status: statusUpdate.status })
+                         .eq('message_id', statusUpdate.id);
+
+                     if (updateError) {
+                         console.error('Error updating message status in Supabase:', updateError);
+                     } else {
+                         console.log('Successfully updated message status:', statusUpdate.status, 'for message_id:', statusUpdate.id);
+                     }
+                 }
+             }
+
+             // TODO: Handle changes.value.contacts for new/updated contacts
+             if (change.value.contacts && Array.isArray(change.value.contacts)) {
+                 for (const contactUpdate of change.value.contacts) {
+                     console.log('Received contact update:', contactUpdate);
+                      // Upsert the contact information
+                     const { data: upsertedContact, error: upsertError } = await supabase
+                         .from('whatsapp_contacts')
+                         .upsert({
+                             wa_id: contactUpdate.wa_id,
+                             profile: contactUpdate.profile,
+                             // Add other contact fields as needed
+                         }, { onConflict: 'wa_id' });
+
+                     if (upsertError) {
+                         console.error('Error upserting contact in Supabase:', upsertError);
+                     } else {
+                         console.log('Successfully upserted contact:', contactUpdate.wa_id);
+                     }
+                 }
+             }
+
           }
         }
       }
+
+      // Respond to Meta with a 200 OK
+      return { status: 200, body: 'Event received' };
+
     } catch (error) {
-      console.error('Unhandled error handling webhook:', error);
-      throw error; // Re-throw the error so the route handler catches it
+      console.error('Error processing webhook payload:', error);
+      // Respond with an error status if processing failed, though Meta usually expects 200 OK
+       return { status: 500, body: 'Internal Server Error' };
     }
+  }
+
+  // Helper function to fetch media URL from WhatsApp API
+  private async fetchMediaUrl(mediaId: string): Promise<string | null> {
+      if (!WHATSAPP_ACCESS_TOKEN) {
+          console.error('WHATSAPP_ACCESS_TOKEN is not set for fetching media.');
+          return null;
+      }
+
+      console.log('Fetching media URL from WhatsApp API for ID:', mediaId);
+      try {
+          const response = await fetch(`${BASE_URL}/${mediaId}`, {
+              headers: {
+                  'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+              },
+          });
+
+          if (!response.ok) {
+              const errorBody = await response.text();
+              console.error('WhatsApp Media Fetch Error:', { status: response.status, statusText: response.statusText, errorBody, mediaId });
+              return null;
+          }
+
+          const data = await response.json();
+           console.log('WhatsApp Media Fetch Response Data:', data);
+          return data.url; // The URL to download the media
+
+      } catch (error) {
+          console.error('Error fetching media URL from WhatsApp API:', error);
+          return null;
+      }
+  }
+
+  // Helper function to download media and upload to Supabase Storage
+  private async uploadMediaToSupabase(mediaUrl: string, mediaId: string, messageType: string): Promise<string | null> {
+       const supabase = this.getSupabaseClient();
+       if (!supabase) {
+           console.error('Supabase client not available for media upload in webhook.');
+           return null;
+       }
+
+       console.log('Downloading media from WhatsApp URL and uploading to Supabase:', mediaUrl);
+       try {
+           // Fetch the media data
+           const mediaResponse = await fetch(mediaUrl, {
+               headers: {
+                   'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+               },
+           });
+
+           if (!mediaResponse.ok) {
+               console.error('Failed to download media from WhatsApp:', { status: mediaResponse.status, mediaUrl });
+               return null;
+           }
+
+           // Get the blob data
+           const mediaBlob = await mediaResponse.blob();
+            console.log('Downloaded media blob:', mediaBlob);
+
+           // Determine file extension from mime type if available
+            let fileExtension = '';
+            if (mediaBlob.type) {
+                const mimeParts = mediaBlob.type.split('/');
+                if (mimeParts.length > 1) {
+                    fileExtension = '.' + mimeParts[1];
+                }
+            }
+             // Fallback extension based on message type if mime type is generic or missing
+            if (!fileExtension) {
+                switch(messageType) {
+                    case 'image': fileExtension = '.jpg'; break; // Common fallback
+                    case 'audio': fileExtension = '.mp3'; break; // Common fallback
+                    case 'video': fileExtension = '.mp4'; break; // Common fallback
+                    case 'document': fileExtension = '.bin'; break; // Generic binary fallback
+                    default: fileExtension = '';
+                }
+            }
+
+           // Define the storage path and filename
+           // Using a simple path structure like `media/<messageType>/<mediaId>.<ext>`
+           const filePath = `media/${messageType}/${mediaId}${fileExtension}`;
+            console.log('Uploading media to Supabase path:', filePath);
+
+           // Upload the blob to Supabase Storage
+           const { data, error: uploadError } = await supabase.storage
+               .from('whatsappt-multimedia') // Your Supabase bucket name
+               .upload(filePath, mediaBlob, {
+                   contentType: mediaBlob.type || undefined, // Include content type if known
+               });
+
+           if (uploadError) {
+               console.error('Error uploading media blob to Supabase:', uploadError, { filePath });
+               return null;
+           }
+
+           // Get the public URL
+           const { data: publicUrlData } = supabase.storage
+               .from('whatsappt-multimedia') // Your Supabase bucket name
+               .getPublicUrl(filePath);
+
+            if (!publicUrlData?.publicUrl) {
+                console.error('Error getting public URL after upload:', { filePath });
+                return null;
+            }
+
+           console.log('Successfully uploaded media to Supabase. Public URL:', publicUrlData.publicUrl);
+           return publicUrlData.publicUrl;
+
+       } catch (error) {
+           console.error('Error in uploadMediaToSupabase:', error, { mediaUrl, mediaId, messageType });
+           return null;
+       }
   }
 }
 
