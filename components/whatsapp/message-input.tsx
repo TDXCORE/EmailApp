@@ -19,6 +19,16 @@ export default function MessageInput({ onSend, isLoading }: MessageInputProps) {
     }
   }
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      console.log('Selected file:', file);
+      // TODO: Add file upload and sending logic here
+    }
+    // Clear the file input value so the same file can be selected again
+    event.target.value = '';
+  };
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -33,14 +43,15 @@ export default function MessageInput({ onSend, isLoading }: MessageInputProps) {
         >
           <Smile className="w-6 h-6" />
         </button>
-        <button
-          type="button"
-          className="p-2 hover:bg-gray-200 rounded-full focus:outline-none text-gray-500"
-          title="Adjuntar archivo"
-          tabIndex={-1}
-        >
+        <input
+          type="file"
+          id="fileInput"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <label htmlFor="fileInput" className="cursor-pointer p-2 hover:bg-gray-200 rounded-full focus:outline-none text-gray-500" title="Adjuntar archivo">
           <Paperclip className="w-6 h-6" />
-        </button>
+        </label>
       </div>
 
       <div className="flex-1 bg-gray-100 rounded-lg px-4 py-2 focus-within:ring-1 focus-within:ring-blue-400">

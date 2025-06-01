@@ -14,7 +14,7 @@ export interface WhatsAppRealtimeMessage {
   to_number: string
   type: string
   content: any
-  status: 'sent' | 'received' | 'delivered' | 'read'
+  status: 'sent' | 'received' | 'delivered' | 'read' | 'pending'
   created_at: string
   isOutgoing: boolean
   contact?: Contact;
