@@ -210,13 +210,17 @@ export class WhatsAppAPI {
             if (messages && messages.length > 0) {
               for (const message of messages) {
                 console.log('Processing message:', JSON.stringify(message, null, 2));
+                
+                // Extract the 'to' number from metadata for incoming messages
+                const toPhoneNumber = value.metadata.phone_number_id;
+
                 // Store incoming message in Supabase
                 const { data, error } = await supabase
                   .from('whatsapp_messages')
                   .insert({
                     message_id: message.id,
                     from_number: message.from,
-                    to_number: message.to,
+                    to_number: toPhoneNumber, // Use the extracted 'to' number
                     type: message.type,
                     content: message,
                     status: 'received',
