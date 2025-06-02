@@ -16,9 +16,20 @@ export default function WhatsAppPage() {
   // Get the Supabase client from auth-helpers
   const supabase = createClientComponentClient();
 
+  // Get the WhatsApp Phone Number ID from environment variables
+  const whatsappPhoneNumberId = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID;
+
   useEffect(() => {
     console.log('useEffect in WhatsAppPage running'); // Log useEffect start
     console.log('Using Supabase client from auth-helpers in WhatsAppPage', supabase ? '***INITIALIZED***' : '***NOT INITIALIZED***');
+    console.log('WhatsApp Phone Number ID:', whatsappPhoneNumberId);
+
+    if (!whatsappPhoneNumberId) {
+      console.error('NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID is not set.');
+      setError('Configuration error: WhatsApp Phone Number ID is not set.');
+      setLoading(false);
+      return; // Exit if the phone number ID is not set
+    }
 
     async function fetchContacts() {
       console.log('Fetching contacts from Supabase...'); // Log fetch start
@@ -54,41 +65,45 @@ export default function WhatsAppPage() {
           .from('whatsapp_messages')
           .select('*', { count: 'exact', head: true })
           .eq('from_number', contact.wa_id) // Messages from this contact
-          .eq('to_number', 'TU_NUMERO_DE_EMPRESA') // Replace with your company's WhatsApp number ID
+          .eq('to_number', whatsappPhoneNumberId) // Use the environment variable here
           .neq('status', 'read'); // Not yet read
 
         if (unreadError) {
           console.error(`Error fetching unread count for ${contact.wa_id}:`, unreadError);
         }
 
-        // Fetch the last message content
+        // Fetch the last message content and timestamp
         const { data: lastMessageData, error: lastMessageError } = await supabase
           .from('whatsapp_messages')
-          .select('type, content')
-          .or(`from_number.eq.${contact.wa_id},to_number.eq.${contact.wa_id}`) // Messages involving this contact
+          .select('type, content, created_at') // Select created_at as well
+          .or(`from_number.eq.${contact.wa_id},to_number.eq.${contact.wa_id}`) // Corrected typo here
           .order('created_at', { ascending: false })
           .limit(1);
 
         let lastMessagePreview: string | null = null;
+        let lastMessageTimestamp: string | null = null;
+
         if (lastMessageError) {
           console.error(`Error fetching last message for ${contact.wa_id}:`, lastMessageError);
         } else if (lastMessageData && lastMessageData.length > 0) {
           const lastMessage = lastMessageData[0];
+          lastMessageTimestamp = lastMessage.created_at;
+
           // Generate a preview based on message type
           if (lastMessage.type === 'text' && lastMessage.content?.text?.body) {
-            lastMessagePreview = lastMessage.content.text.body; // Use text body
+            lastMessagePreview = lastMessage.content.text.body;
           } else if (lastMessage.type !== 'text' && lastMessage.content && lastMessage.content[lastMessage.type]) {
               // For media types, show the type or caption/filename if available
               const mediaContent = lastMessage.content[lastMessage.type];
               if (mediaContent.caption) {
-                  lastMessagePreview = mediaContent.caption; // Use caption
+                  lastMessagePreview = mediaContent.caption;
               } else if (mediaContent.filename) {
-                   lastMessagePreview = mediaContent.filename; // Use filename for documents
+                   lastMessagePreview = mediaContent.filename;
               } else {
-                lastMessagePreview = `[${lastMessage.type.charAt(0).toUpperCase()}${lastMessage.type.slice(1)}]`; // e.g., [Image], [Audio]
+                lastMessagePreview = `[${lastMessage.type.charAt(0).toUpperCase()}${lastMessage.type.slice(1)}]`;
               }
           } else {
-               lastMessagePreview = '[Unsupported Message Type]'; // Fallback for unexpected content structure
+               lastMessagePreview = '[Unsupported Message Type]';
           }
            // Truncate preview if too long
            if (lastMessagePreview && lastMessagePreview.length > 50) {
@@ -100,20 +115,185 @@ export default function WhatsAppPage() {
           ...contact,
           unreadCount: unreadCount || 0,
           lastMessagePreview: lastMessagePreview,
+          lastMessageTimestamp: lastMessageTimestamp,
         };
       }));
 
+      // Sort contacts by last message timestamp for correct order in sidebar
+      contactsWithData.sort((a, b) => {
+        const dateA = a.lastMessageTimestamp ? new Date(a.lastMessageTimestamp).getTime() : 0;
+        const dateB = b.lastMessageTimestamp ? new Date(b.lastMessageTimestamp).getTime() : 0;
+        return dateB - dateA; // Descending order
+      });
+
       setContacts(contactsWithData);
       setLoading(false);
-      console.log('Finished fetching contacts with message data.'); // Log fetch end
+      console.log('Finished fetching contacts with message data.');
     }
 
     fetchContacts();
 
-    // Consider adding a real-time subscription here to automatically add new contacts
-    // to the list if a message is received from a new number and update message previews and unread counts
+    // Setup Realtime subscription for messages to update sidebar
+    const messagesChannel = supabase
+      .channel('whatsapp_messages_sidebar') // Unique channel name
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' },
+        async (payload) => { // Made this async to await the fetch
+          console.log('Sidebar Realtime INSERT event triggered!', payload);
+          const newMessage = payload.new;
+          // Determine the other participant based on who sent the message (from_number or to_number being our number)
+          const conversationWaId = newMessage.from_number === whatsappPhoneNumberId ? newMessage.to_number : newMessage.from_number; // Identify the other participant
 
-  }, [supabase]); // Depend on supabase to ensure it's initialized
+          // Re-fetch unread count for this specific conversation
+          const { count: newUnreadCount, error: unreadError } = await supabase
+            .from('whatsapp_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('from_number', conversationWaId) // Messages from this contact
+            .eq('to_number', whatsappPhoneNumberId) // Use the environment variable here
+            .neq('status', 'read'); // Not yet read
+
+          if (unreadError) {
+            console.error(`Error re-fetching unread count for ${conversationWaId}:`, unreadError);
+            // Continue with existing unread count if fetch fails
+          }
+
+          setContacts(currentContacts => {
+            const updatedContacts = currentContacts.map(contact => {
+              if (contact.wa_id === conversationWaId) {
+                // Update last message preview and timestamp
+                let newLastMessagePreview: string | null = null;
+                 if (newMessage.type === 'text' && newMessage.content?.text?.body) {
+                    newLastMessagePreview = newMessage.content.text.body;
+                 } else if (newMessage.type !== 'text' && newMessage.content && newMessage.content[newMessage.type]) {
+                    const mediaContent = newMessage.content[newMessage.type];
+                     if (mediaContent.caption) {
+                         newLastMessagePreview = mediaContent.caption;
+                     } else if (mediaContent.filename) {
+                          newLastMessagePreview = mediaContent.filename;
+                     } else {
+                       newLastMessagePreview = `[${newMessage.type.charAt(0).toUpperCase()}${newMessage.type.slice(1)}]`;
+                     }
+                 } else {
+                      newLastMessagePreview = '[Unsupported Message Type]';
+                 }
+                 if (newLastMessagePreview && newLastMessagePreview.length > 50) {
+                     newLastMessagePreview = newLastMessagePreview.substring(0, 50) + '...';
+                 }
+
+                return { // Return updated contact object
+                  ...contact,
+                  lastMessagePreview: newLastMessagePreview,
+                  lastMessageTimestamp: newMessage.created_at,
+                  // Use the newly fetched unread count
+                  unreadCount: newUnreadCount !== null ? newUnreadCount : (contact.unreadCount || 0),
+                };
+              }
+              return contact; // Return unchanged contact if not the target conversation
+            });
+
+            // If the contact is not in the current list (new conversation), you might want to fetch/add it here
+            // This requires more complex logic to get contact details for a new wa_id
+            // For simplicity now, we assume contacts are pre-populated or added elsewhere.
+            // A simple approach could be to re-fetch contacts after a small delay:
+            // setTimeout(fetchContacts, 1000); // Not ideal for performance
+             console.log('Contacts after INSERT update:', updatedContacts);
+             // Re-sort the list to keep the most recent conversation at the top
+             updatedContacts.sort((a, b) => {
+                const dateA = a.lastMessageTimestamp ? new Date(a.lastMessageTimestamp).getTime() : 0;
+                const dateB = b.lastMessageTimestamp ? new Date(b.lastMessageTimestamp).getTime() : 0;
+                return dateB - dateA; // Descending order
+              });
+
+            return updatedContacts;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'whatsapp_messages' },
+        async (payload) => { // Made this callback async
+          console.log('Sidebar Realtime UPDATE event triggered!', payload);
+          const updatedMessage = payload.new;
+          // Determine the other participant based on who sent the message (from_number or to_number being our number)
+          const conversationWaId = updatedMessage.from_number === whatsappPhoneNumberId ? updatedMessage.to_number : updatedMessage.from_number; // Identify the other participant
+
+          // Re-fetch unread count for this specific conversation
+          const { count: newUnreadCount, error: unreadError } = await supabase
+            .from('whatsapp_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('from_number', conversationWaId) // Messages from this contact
+            .eq('to_number', whatsappPhoneNumberId) // Use the environment variable here
+            .neq('status', 'read'); // Not yet read
+
+          if (unreadError) {
+            console.error(`Error re-fetching unread count for ${conversationWaId}:`, unreadError);
+            // Continue with existing unread count if fetch fails
+          }
+
+          setContacts(currentContacts => {
+            const updatedContacts = currentContacts.map(contact => {
+              if (contact.wa_id === conversationWaId) {
+                // Update last message preview/timestamp if the updated message is the latest
+                const isLatestMessage = !contact.lastMessageTimestamp || new Date(updatedMessage.created_at).getTime() >= new Date(contact.lastMessageTimestamp).getTime();
+
+                let newLastMessagePreview = contact.lastMessagePreview;
+                let newLastMessageTimestamp = contact.lastMessageTimestamp;
+
+                if (isLatestMessage) {
+                  // Update last message preview logic (same as INSERT)
+                  if (updatedMessage.type === 'text' && updatedMessage.content?.text?.body) {
+                    newLastMessagePreview = updatedMessage.content.text.body;
+                  } else if (updatedMessage.type !== 'text' && updatedMessage.content && updatedMessage.content[updatedMessage.type]) {
+                    const mediaContent = updatedMessage.content[updatedMessage.type];
+                    if (mediaContent.caption) {
+                      newLastMessagePreview = mediaContent.caption;
+                    } else if (mediaContent.filename) {
+                      newLastMessagePreview = mediaContent.filename;
+                    } else {
+                      newLastMessagePreview = `[${updatedMessage.type.charAt(0).toUpperCase()}${updatedMessage.type.slice(1)}]`;
+                    }
+                  } else {
+                    newLastMessagePreview = '[Unsupported Message Type]';
+                  }
+                  if (newLastMessagePreview && newLastMessagePreview.length > 50) {
+                    newLastMessagePreview = newLastMessagePreview.substring(0, 50) + '...';
+                  }
+                  newLastMessageTimestamp = updatedMessage.created_at;
+                }
+
+                return { // Return updated contact object
+                  ...contact,
+                  // Use the newly fetched unread count
+                  unreadCount: newUnreadCount !== null ? newUnreadCount : (contact.unreadCount || 0),
+                  lastMessagePreview: newLastMessagePreview,
+                  lastMessageTimestamp: newLastMessageTimestamp,
+                };
+              }
+              return contact; // Return unchanged contact
+            });
+
+            console.log('Contacts after UPDATE update:', updatedContacts);
+            // Re-sort the list
+            updatedContacts.sort((a, b) => {
+              const dateA = a.lastMessageTimestamp ? new Date(a.lastMessageTimestamp).getTime() : 0;
+              const dateB = b.lastMessageTimestamp ? new Date(b.lastMessageTimestamp).getTime() : 0;
+              return dateB - dateA; // Descending order
+            });
+
+            return updatedContacts;
+          });
+        }
+      )
+      .subscribe();
+
+    // Cleanup function for the subscription
+    return () => {
+      console.log('Cleaning up sidebar realtime subscription.');
+      supabase.removeChannel(messagesChannel);
+    };
+
+  }, [supabase, whatsappPhoneNumberId]); // Depend on supabase and whatsappPhoneNumberId
 
   if (loading) {
     return <div>Loading conversations...</div>;

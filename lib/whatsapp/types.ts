@@ -42,6 +42,7 @@ export interface Contact {
   profile?: { name?: string };
   unreadCount?: number;
   lastMessagePreview?: string | null;
+  lastMessageTimestamp?: string | null;
 }
 
 export interface WhatsAppConversation {
