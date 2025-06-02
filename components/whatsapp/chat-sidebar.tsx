@@ -31,7 +31,7 @@ export default function ChatSidebar({ contacts, onSelectConversation, selectedWa
                     date.getFullYear() === now.getFullYear();
 
     if (isToday) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else {
       return date.toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' });
     }
@@ -65,46 +65,44 @@ export default function ChatSidebar({ contacts, onSelectConversation, selectedWa
         ) : (
           <ul>
             {filteredContacts.map((contact) => (
-              <li key={contact.id}>
-                <button
-                  className={`flex items-center w-full px-4 py-3 border-b border-gray-100 focus:outline-none transition-colors duration-150
-                    ${selectedWaId === contact.wa_id ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                  onClick={() => onSelectConversation(contact.wa_id)}
-                >
-                  {/* Avatar Placeholder */}
-                  <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-semibold text-lg mr-4">
-                     {/* Display first letter of name or a default icon */}
-                     {contact.profile?.name ? contact.profile.name.charAt(0).toUpperCase() : '?'}
+              <li
+                key={contact.id}
+                className={`flex items-center p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${selectedWaId === contact.wa_id ? 'bg-gray-100' : ''}`}
+                onClick={() => onSelectConversation(contact.wa_id)}
+              >
+                {/* Avatar */}
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-white font-bold">
+                    {contact.profile?.name ? contact.profile.name.charAt(0).toUpperCase() : contact.wa_id.charAt(0)}
                   </div>
-                  
-                  {/* Contact Info, Last Message Preview, Timestamp, and Unread Count */}
-                  <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className={`text-base font-semibold text-gray-800 truncate ${contact.unreadCount && contact.unreadCount > 0 ? 'text-gray-800' : 'text-gray-600'}`}>
-                        {contact.profile?.name || contact.wa_id}
-                      </h3>
-                      {/* Last Message Timestamp */}
-                      {contact.lastMessageTimestamp && (
-                        <span className={`text-xs ${contact.unreadCount && contact.unreadCount > 0 ? 'text-blue-600 font-semibold' : 'text-gray-500'} flex-shrink-0`}>
-                          {formatTimestamp(contact.lastMessageTimestamp)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                       {/* Display Last Message Snippet */}
-                      <p className={`text-sm truncate ${contact.unreadCount && contact.unreadCount > 0 ? 'text-gray-800 font-semibold' : 'text-gray-600'} flex-1`}>
-                        {contact.lastMessagePreview || 'No messages yet'}
-                      </p>
+                </div>
 
-                      {/* Display Unread Count */}
-                      {contact.unreadCount && contact.unreadCount > 0 && (
-                        <div className="ml-auto bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
-                          {contact.unreadCount}
-                        </div>
-                      )}
-                    </div>
+                {/* Contact Info and Last Message */}
+                <div className="flex-1 ml-3 overflow-hidden">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-800 truncate">
+                      {contact.profile?.name || contact.wa_id}
+                    </span>
+                    {/* Timestamp - Color based on unread count and selection */}
+                    {contact.lastMessageTimestamp && (
+                      <span className={`text-xs ${contact.unreadCount && contact.unreadCount > 0 && selectedWaId !== contact.wa_id ? 'text-green-600 font-semibold' : 'text-gray-500'}`}>
+                        {formatTimestamp(contact.lastMessageTimestamp)}
+                      </span>
+                    )}
                   </div>
-                </button>
+                  <div className="text-sm text-gray-600 truncate">
+                    {contact.lastMessagePreview || 'No messages yet'}
+                  </div>
+                </div>
+
+                {/* Unread Count Badge - Show only if unreadCount > 0 and not selected */}
+                {contact.unreadCount && contact.unreadCount > 0 && selectedWaId !== contact.wa_id && (
+                  <div className="flex-shrink-0 ml-2">
+                    <span className="flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-green-500 rounded-full">
+                      {contact.unreadCount}
+                    </span>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

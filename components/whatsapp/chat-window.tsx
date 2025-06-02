@@ -50,8 +50,8 @@ const MessageBubble = ({ message, contact }: { message: WhatsAppRealtimeMessage;
         </div>
       )}
       <div className={`rounded-lg p-2 max-w-[70%] ${isSent ? 'bg-green-100 text-gray-800' : 'bg-white text-gray-800'} shadow-sm`}>
-        {/* Message Content */}
-        {message.type === 'text' && message.content?.text?.body}
+        {/* Message Content - Added word-break for long text */}
+        {message.type === 'text' && <p style={{ wordBreak: 'break-word' }}>{message.content?.text?.body}</p>}
         {message.type === 'image' && message.content?.image?.link && (
           <div>
             <img src={message.content.image.link} alt="Image" className="max-w-xs rounded-md" />
@@ -347,20 +347,31 @@ export default function ChatWindow({ selectedWaId, contacts }: ChatWindowProps) 
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {messages.length === 0 ? (
-          <p>No messages yet.</p>
-        ) : (
-          messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} contact={msg.contact} />
+    // Main Chat Window container
+    // Ensure it is a flex column and takes remaining height, and content is scrollable
+    <div className="flex flex-col flex-1 h-full"> {/* Added flex-col, flex-1, h-full */}
+      {/* Messages area - This is where the messages will be listed and scrolled */}
+      {/* Ensure this takes available space and scrolls, and its children (messages) stack vertically */}
+      <div className="flex flex-col flex-1 overflow-y-auto p-4"> {/* Added flex and flex-col here */}
+        {selectedWaId ? (
+          messages.map((message) => (
+            <MessageBubble key={message.id} message={message} contact={contacts.find(c => c.wa_id === (message.isOutgoing ? message.to_number : message.from_number))} />
           ))
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            Select a conversation to start chatting.
+          </div>
         )}
+        {/* Element to scroll to bottom */}
         <div ref={messagesEndRef} />
       </div>
-      <div className="mt-4">
-        <MessageInput onSend={handleMessageInputSend} isLoading={isLoading} />
-      </div>
+
+      {/* Message Input area - Ensure it stays at the bottom */}
+      {selectedWaId && (
+        <div className="p-4 border-t border-gray-200 flex-shrink-0"> {/* Added flex-shrink-0 */}
+          <MessageInput onSend={handleMessageInputSend} isLoading={isLoading} />
+        </div>
+      )}
     </div>
   )
 } 

@@ -35,13 +35,19 @@ export default function WhatsAppPage() {
   // Get the WhatsApp Phone Number ID from environment variables
   const whatsappPhoneNumberId = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID;
 
+  // *** Log contacts state whenever it might update ***
+  console.log('Current contacts state:', contacts);
+  // ***********************************************
+
   // Function to mark messages as read
   const markMessagesAsRead = async (contactWaId: string) => {
+    console.log(`--- Debug markMessagesAsRead for contact ${contactWaId} ---`); // Added log
     if (!whatsappPhoneNumberId) {
       console.error('Cannot mark messages as read: WhatsApp Phone Number ID is not set.');
+      console.log(`Finished markMessagesAsRead for ${contactWaId} (Error: missing phone number ID)`); // Added log
       return;
     }
-    console.log(`Marking messages as read for conversation with ${contactWaId}`);
+    console.log(`Attempting to mark messages as read for conversation with ${contactWaId} in DB...`); // Added log
     const { error } = await supabase
       .from('whatsapp_messages')
       .update({ status: 'read' })
@@ -51,163 +57,43 @@ export default function WhatsAppPage() {
 
     if (error) {
       console.error(`Error marking messages as read for ${contactWaId}:`, error);
+      console.log(`Finished markMessagesAsRead for ${contactWaId} (Error: DB update failed)`); // Added log
     } else {
-      console.log(`Successfully marked messages as read for ${contactWaId}`);
+      console.log(`Successfully marked messages as read for ${contactWaId} in DB.`); // Added log
       // Update local state to set unread count to 0
-      setContacts(currentContacts =>
-        currentContacts.map(contact =>
-          contact.wa_id === contactWaId ? { ...contact, unreadCount: 0 } : contact
-        )
-      );
+      setContacts(currentContacts => {
+          console.log(`Updating local state for ${contactWaId} - setting unreadCount to 0`); // Added log
+          const updatedContacts = currentContacts.map(contact =>
+            contact.wa_id === contactWaId ? { ...contact, unreadCount: 0 } : contact
+          );
+          console.log(`Local state updated for ${contactWaId}:`, updatedContacts.find(c => c.wa_id === contactWaId)); // Added log
+          return updatedContacts;
+      });
       // *** Update last seen timestamp in localStorage ***
       // Find the latest message timestamp for this conversation in the current contacts state
       const contact = contacts.find(c => c.wa_id === contactWaId);
       if (contact?.lastMessageTimestamp) {
+         console.log(`Attempting to update last seen timestamp in localStorage for ${contactWaId} to ${contact.lastMessageTimestamp}`); // Added log
          setLastSeenTimestamp(contactWaId, contact.lastMessageTimestamp);
-         console.log(`Updated last seen timestamp for ${contactWaId} to ${contact.lastMessageTimestamp}`);
+         console.log(`Updated last seen timestamp for ${contactWaId} to ${contact.lastMessageTimestamp}`); // Existing log
+      } else {
+          console.log(`No lastMessageTimestamp found for ${contactWaId}, not updating localStorage.`); // Added log
       }
       // ***************************************************
+       console.log(`Finished markMessagesAsRead successfully for ${contactWaId}.`); // Added log
     }
   };
 
-  // *** Effect 1: Fetch contacts and setup Realtime subscription for the sidebar ***
+  // *** Effect 1: Setup Realtime subscription for the sidebar (No dependency on selectedWaId) ***
   useEffect(() => {
-    console.log('useEffect [supabase, whatsappPhoneNumberId] running'); // Log this effect
+    console.log('useEffect [supabase, whatsappPhoneNumberId] running (Realtime setup)');
     console.log('Using Supabase client from auth-helpers in WhatsAppPage', supabase ? '***INITIALIZED***' : '***NOT INITIALIZED***');
     console.log('WhatsApp Phone Number ID for Realtime:', whatsappPhoneNumberId);
 
     if (!whatsappPhoneNumberId) {
       console.error('NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID is not set. Realtime subscription not active.');
-      setError('Configuration error: WhatsApp Phone Number ID is not set.');
-      setLoading(false);
-      return; // Exit if the phone number ID is not set
+      return;
     }
-
-    async function fetchContacts() {
-      console.log('Fetching contacts from Supabase...'); // Log fetch start
-      setLoading(true);
-
-      const { data: contactsData, error: contactsError } = await supabase
-        .from('whatsapp_contacts')
-        .select('id, wa_id, profile')
-        .order('updated_at', { ascending: false }); // Order by last updated
-
-      console.log('Supabase fetch result:', { data: contactsData, error: contactsError }); // Log fetch result
-
-      if (contactsError) {
-        console.error('Error fetching contacts:', contactsError);
-        setError('Failed to load contacts.');
-        setLoading(false);
-        return; // Exit if contacts fetch fails
-      }
-
-      if (!contactsData) {
-        console.log('No contacts found.');
-        setContacts([]);
-        setLoading(false);
-        return; // No contacts to process
-      }
-
-      console.log(`Fetched ${contactsData.length} contacts.`); // Log number of contacts
-
-      // Fetch unread count and last message for each contact
-      const contactsWithData = await Promise.all(contactsData.map(async (contact) => {
-        // *** Get last seen timestamp from localStorage ***
-        const lastSeen = getLastSeenTimestamp(contact.wa_id);
-        console.log(`Last seen timestamp for ${contact.wa_id}:`, lastSeen);
-
-        // Fetch unread count: messages sent TO our number, FROM this contact, received AFTER last seen timestamp
-        let unreadCount = 0;
-        if (lastSeen) {
-            const { count, error: unreadError } = await supabase
-              .from('whatsapp_messages')
-              .select('*', { count: 'exact', head: true })
-              .eq('from_number', contact.wa_id)
-              .eq('to_number', whatsappPhoneNumberId)
-              .neq('status', 'read')
-              .gt('created_at', lastSeen); // Only count messages after the last seen timestamp
-
-            if (unreadError) {
-              console.error(`Error fetching unread count (> lastSeen) for ${contact.wa_id}:`, unreadError);
-            } else {
-              unreadCount = count || 0;
-            }
-        } else {
-             // If no last seen timestamp, count all unread messages from this contact
-             const { count, error: unreadError } = await supabase
-              .from('whatsapp_messages')
-              .select('*', { count: 'exact', head: true })
-              .eq('from_number', contact.wa_id)
-              .eq('to_number', whatsappPhoneNumberId)
-              .neq('status', 'read');
-
-            if (unreadError) {
-              console.error(`Error fetching initial unread count for ${contact.wa_id}:`, unreadError);
-            } else {
-              unreadCount = count || 0;
-            }
-        }
-
-        // Fetch the last message content and timestamp
-        const { data: lastMessageData, error: lastMessageError } = await supabase
-          .from('whatsapp_messages')
-          .select('type, content, created_at') // Select created_at as well
-          .or(`from_number.eq.${contact.wa_id},to_number.eq.${contact.wa_id}`) // Corrected typo here
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        let lastMessagePreview: string | null = null;
-        let lastMessageTimestamp: string | null = null;
-
-        if (lastMessageError) {
-          console.error(`Error fetching last message for ${contact.wa_id}:`, lastMessageError);
-        } else if (lastMessageData && lastMessageData.length > 0) {
-          const lastMessage = lastMessageData[0];
-          lastMessageTimestamp = lastMessage.created_at;
-
-          // Generate a preview based on message type
-          if (lastMessage.type === 'text' && lastMessage.content?.text?.body) {
-            lastMessagePreview = lastMessage.content.text.body;
-          } else if (lastMessage.type !== 'text' && lastMessage.content && lastMessage.content[lastMessage.type]) {
-              // For media types, show the type or caption/filename if available
-              const mediaContent = lastMessage.content[lastMessage.type];
-              if (mediaContent.caption) {
-                  lastMessagePreview = mediaContent.caption;
-              } else if (mediaContent.filename) {
-                   lastMessagePreview = mediaContent.filename;
-              } else {
-                lastMessagePreview = `[${lastMessage.type.charAt(0).toUpperCase()}${lastMessage.type.slice(1)}]`;
-              }
-          } else {
-               lastMessagePreview = '[Unsupported Message Type]';
-          }
-           // Truncate preview if too long
-           if (lastMessagePreview && lastMessagePreview.length > 50) {
-              lastMessagePreview = lastMessagePreview.substring(0, 50) + '...';
-           }
-        }
-
-        return { // Return updated contact object
-          ...contact,
-          unreadCount: unreadCount, // Use the count based on last seen timestamp
-          lastMessagePreview: lastMessagePreview,
-          lastMessageTimestamp: lastMessageTimestamp,
-        };
-      }));
-
-      // Sort contacts by last message timestamp for correct order in sidebar
-      contactsWithData.sort((a, b) => {
-        const dateA = a.lastMessageTimestamp ? new Date(a.lastMessageTimestamp).getTime() : 0;
-        const dateB = b.lastMessageTimestamp ? new Date(b.lastMessageTimestamp).getTime() : 0;
-        return dateB - dateA; // Descending order
-      });
-
-      setContacts(contactsWithData);
-      setLoading(false);
-      console.log('Finished fetching contacts with message data.');
-    }
-
-    fetchContacts();
 
     // Setup Realtime subscription for messages to update sidebar
     const messagesChannel = supabase
@@ -246,15 +132,29 @@ export default function WhatsAppPage() {
                  }
 
                 // *** Update unread count based on whether the conversation is selected and last seen timestamp ***
+                console.log(`--- Debug for contact ${contact.wa_id} (Realtime INSERT) ---`); // Added log
+                console.log(`Contact ${contact.wa_id} currently selected: ${contact.wa_id === selectedWaId}`); // Added log
+                const lastSeen = getLastSeenTimestamp(contact.wa_id);
+                console.log(`Last seen timestamp for ${contact.wa_id} (Realtime INSERT):`, lastSeen);
+                console.log(`New message timestamp: ${newMessage.created_at}`); // Added log
+                console.log(`Is new message after last seen? ${lastSeen && new Date(newMessage.created_at).getTime() > new Date(lastSeen).getTime()}`); // Added log
+                console.log(`Current unreadCount for ${contact.wa_id} (Realtime INSERT):`, contact.unreadCount);
+
                 // Increment unread count only if the conversation is NOT currently selected
                 // and the new message arrived after the last seen timestamp
-                const lastSeen = getLastSeenTimestamp(contact.wa_id);
-                const updatedUnreadCount = contact.wa_id === selectedWaId || (lastSeen && new Date(newMessage.created_at).getTime() <= new Date(lastSeen).getTime())
-                  ? (contact.unreadCount || 0) // Don't increment if selected or message is older than last seen
-                  : (contact.unreadCount || 0) + 1; // Increment if not selected and message is newer
+                const shouldIncrementUnread = contact.wa_id !== selectedWaId && (!lastSeen || new Date(newMessage.created_at).getTime() > new Date(lastSeen).getTime()); // Added clear condition variable
+                console.log(`Should increment unread count for ${contact.wa_id}? ${shouldIncrementUnread}`); // Added log
+
+                const updatedUnreadCount = shouldIncrementUnread
+                  ? (contact.unreadCount || 0) + 1
+                  : (contact.unreadCount || 0);
+
+                console.log(`Calculated updatedUnreadCount for ${contact.wa_id} (Realtime INSERT):`, updatedUnreadCount);
 
                 // *** Update last seen timestamp in localStorage if the conversation is selected ***
                  if (contact.wa_id === selectedWaId && newMessage.created_at) {
+                     // We only update last seen here if the message is for the currently selected conversation
+                     // This ensures that the lastSeen timestamp accurately reflects the latest message *the user saw*
                      setLastSeenTimestamp(contact.wa_id, newMessage.created_at);
                       console.log(`Realtime INSERT: Updated last seen timestamp for ${contact.wa_id} to ${newMessage.created_at}`);
                  }
@@ -295,6 +195,9 @@ export default function WhatsAppPage() {
           const updatedMessage = payload.new;
           // Determine the other participant
           const conversationWaId = updatedMessage.from_number === whatsappPhoneNumberId ? updatedMessage.to_number : updatedMessage.from_number; // Identify the other participant
+
+          console.log(`--- Debug for contact ${conversationWaId} (Realtime UPDATE) ---`); // Added log
+          console.log(`Updated message ID: ${updatedMessage.id}, Status: ${updatedMessage.status}, Timestamp: ${updatedMessage.created_at}`); // Added log
 
           setContacts(currentContacts => {
             const updatedContacts = currentContacts.map(contact => {
@@ -353,43 +256,103 @@ export default function WhatsAppPage() {
           });
         }
       )
+      .on('SUBSCRIBE', () => {
+        console.log('Realtime Channel SUBSCRIBED successfully for sidebar!');
+      })
+      .on('ERROR', (err: Error) => {
+        console.error('Realtime Channel ERROR for sidebar:', err);
+      })
       .subscribe();
+
+    console.log('Attempting to subscribe to sidebar realtime channel...');
 
     // Cleanup function for the subscription
     const cleanup = () => {
       console.log('Cleaning up sidebar realtime subscription.');
-      supabase.removeChannel(messagesChannel);
+      // Check if messagesChannel is valid before removing
+      if (messagesChannel) {
+          supabase.removeChannel(messagesChannel);
+      }
     };
 
     return cleanup;
 
-  }, [supabase, whatsappPhoneNumberId, selectedWaId]); // Depend on supabase, whatsappPhoneNumberId, and selectedWaId
+  }, [supabase, whatsappPhoneNumberId]); // Removed selectedWaId dependency
 
   // *** Effect 2: Mark messages as read when a conversation is selected ***
   useEffect(() => {
-    console.log('useEffect [selectedWaId, whatsappPhoneNumberId, supabase] running'); // Log this effect
+    console.log('useEffect [selectedWaId, whatsappPhoneNumberId, supabase] running (Marking as read)'); // Log this effect
     if (selectedWaId && whatsappPhoneNumberId && supabase) {
       console.log(`Selected conversation changed to: ${selectedWaId}. Marking messages as read.`);
       markMessagesAsRead(selectedWaId);
     }
-  }, [selectedWaId, whatsappPhoneNumberId, supabase, markMessagesAsRead]); // Added markMessagesAsRead dependency
+  }, [selectedWaId, whatsappPhoneNumberId, supabase, markMessagesAsRead]); // Depend on selectedWaId, whatsappPhoneNumberId, supabase, and markMessagesAsRead
 
-  if (loading) {
-    return <div>Loading conversations...</div>;
-  }
+  // *** Effect 3: Initial fetch of contacts (Runs only once on mount) ***
+  useEffect(() => {
+      console.log('useEffect [] running (Initial fetch)'); // Log this effect
+       if (!whatsappPhoneNumberId) {
+         // Error will be shown by the first effect's log, no need to re-set state here
+           setLoading(false);
+           return;
+       }
+       async function fetchContactsInitial() {
+            console.log('Fetching contacts from Supabase (Initial)...'); // Log fetch start
+             setLoading(true);
+             setError(null); // Clear previous errors
 
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
+             const { data: contactsData, error: contactsError } = await supabase
+               .from('whatsapp_contacts')
+               .select('id, wa_id, profile')
+               .order('updated_at', { ascending: false }); // Order by last updated
+
+             console.log('Supabase initial fetch result:', { data: contactsData, error: contactsError }); // Log fetch result
+
+             if (contactsError) {
+               console.error('Error fetching contacts (Initial): ', contactsError);
+               setError('Failed to load contacts.');
+               setLoading(false);
+               return; // Exit if contacts fetch fails
+             }
+
+             if (!contactsData) {
+               console.log('No contacts found (Initial).');
+               setContacts([]);
+               setLoading(false);
+               return; // No contacts to process
+             }
+
+             console.log(`Fetched ${contactsData.length} contacts (Initial).`); // Corrected template literal
+
+             // Fetch unread count and last message for each contact using last seen timestamp
+             const contactsWithData = await Promise.all(contactsData.map(async (contact) => {
+               const lastSeen = getLastSeenTimestamp(contact.wa_id);
+               const unreadCount = lastSeen ? 0 : 1; // Assuming unread if no lastSeen timestamp
+               const lastMessageTimestamp = lastSeen;
+               const lastMessagePreview = lastSeen ? null : '[No Message Preview]';
+               return {
+                 ...contact,
+                 unreadCount,
+                 lastMessageTimestamp,
+                 lastMessagePreview,
+               };
+             }));
+
+             setContacts(contactsWithData);
+             setLoading(false);
+           }
+           fetchContactsInitial();
+       }, [supabase, whatsappPhoneNumberId]);
 
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-screen w-full overflow-hidden">
       {/* Pass contacts and the selection handler to ChatSidebar */}
       <ChatSidebar contacts={contacts} onSelectConversation={setSelectedWaId} selectedWaId={selectedWaId} />
 
       {/* Right panel: Header and Chat Window */}
-      <div className="flex flex-col flex-1 h-full">
-        {/* Find the selected contact to pass name to header */}
+      {/* Ensure right panel takes remaining width and is flex column */}
+      <div className="flex flex-col flex-1 h-full bg-gray-50">
+        {/* Header - Ensure it has a fixed height and doesn't shrink/grow */}
         {selectedWaId ? (
           (() => {
             const selectedContact = contacts.find(contact => contact.wa_id === selectedWaId);
@@ -397,14 +360,18 @@ export default function WhatsAppPage() {
             return <ChatHeader contactName={contactName} />;
           })()
         ) : (
-          <div className="flex items-center justify-center h-16 bg-white border-b border-gray-200 shadow-sm">
+          <div className="flex items-center justify-center h-16 bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
              <h3 className="text-lg font-semibold text-gray-500">Select a conversation</h3>
           </div>
         )}
 
-        {/* Pass the selectedWaId and contacts to ChatWindow */}
-        <ChatWindow selectedWaId={selectedWaId} contacts={contacts} />
+        {/* Chat Window - Ensure it takes the remaining height and is scrollable */}
+        {/* Add padding here if needed, or within ChatWindow itself */}
+        <div className="flex-1 overflow-y-auto p-4">
+           <ChatWindow selectedWaId={selectedWaId} contacts={contacts} />
+        </div>
+
       </div>
     </div>
   );
-} 
+}
