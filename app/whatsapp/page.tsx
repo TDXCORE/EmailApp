@@ -7,6 +7,22 @@ import ChatWindow from '@/components/whatsapp/chat-window';
 import ChatHeader from '@/components/whatsapp/chat-header';
 import { Contact } from '@/lib/whatsapp/types';
 
+// Helper functions for managing last seen timestamps in localStorage
+const getLastSeenTimestamp = (waId: string): string | null => {
+  if (typeof window === 'undefined') return null; // Avoid localStorage errors on server-side
+  const lastSeen = localStorage.getItem(`lastSeen-${waId}`);
+  return lastSeen;
+};
+
+const setLastSeenTimestamp = (waId: string, timestamp: string | null) => {
+  if (typeof window === 'undefined') return; // Avoid localStorage errors on server-side
+  if (timestamp) {
+    localStorage.setItem(`lastSeen-${waId}`, timestamp);
+  } else {
+    localStorage.removeItem(`lastSeen-${waId}`);
+  }
+};
+
 export default function WhatsAppPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +52,21 @@ export default function WhatsAppPage() {
     if (error) {
       console.error(`Error marking messages as read for ${contactWaId}:`, error);
     } else {
-       console.log(`Successfully marked messages as read for ${contactWaId}`);
+      console.log(`Successfully marked messages as read for ${contactWaId}`);
+      // Update local state to set unread count to 0
+      setContacts(currentContacts =>
+        currentContacts.map(contact =>
+          contact.wa_id === contactWaId ? { ...contact, unreadCount: 0 } : contact
+        )
+      );
+      // *** Update last seen timestamp in localStorage ***
+      // Find the latest message timestamp for this conversation in the current contacts state
+      const contact = contacts.find(c => c.wa_id === contactWaId);
+      if (contact?.lastMessageTimestamp) {
+         setLastSeenTimestamp(contactWaId, contact.lastMessageTimestamp);
+         console.log(`Updated last seen timestamp for ${contactWaId} to ${contact.lastMessageTimestamp}`);
+      }
+      // ***************************************************
     }
   };
 
@@ -82,16 +112,40 @@ export default function WhatsAppPage() {
 
       // Fetch unread count and last message for each contact
       const contactsWithData = await Promise.all(contactsData.map(async (contact) => {
-        // Fetch unread count (messages sent TO our number that are not read)
-        const { count: unreadCount, error: unreadError } = await supabase
-          .from('whatsapp_messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('from_number', contact.wa_id) // Messages from this contact
-          .eq('to_number', whatsappPhoneNumberId) // Use the environment variable here
-          .neq('status', 'read'); // Not yet read
+        // *** Get last seen timestamp from localStorage ***
+        const lastSeen = getLastSeenTimestamp(contact.wa_id);
+        console.log(`Last seen timestamp for ${contact.wa_id}:`, lastSeen);
 
-        if (unreadError) {
-          console.error(`Error fetching unread count for ${contact.wa_id}:`, unreadError);
+        // Fetch unread count: messages sent TO our number, FROM this contact, received AFTER last seen timestamp
+        let unreadCount = 0;
+        if (lastSeen) {
+            const { count, error: unreadError } = await supabase
+              .from('whatsapp_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('from_number', contact.wa_id)
+              .eq('to_number', whatsappPhoneNumberId)
+              .neq('status', 'read')
+              .gt('created_at', lastSeen); // Only count messages after the last seen timestamp
+
+            if (unreadError) {
+              console.error(`Error fetching unread count (> lastSeen) for ${contact.wa_id}:`, unreadError);
+            } else {
+              unreadCount = count || 0;
+            }
+        } else {
+             // If no last seen timestamp, count all unread messages from this contact
+             const { count, error: unreadError } = await supabase
+              .from('whatsapp_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('from_number', contact.wa_id)
+              .eq('to_number', whatsappPhoneNumberId)
+              .neq('status', 'read');
+
+            if (unreadError) {
+              console.error(`Error fetching initial unread count for ${contact.wa_id}:`, unreadError);
+            } else {
+              unreadCount = count || 0;
+            }
         }
 
         // Fetch the last message content and timestamp
@@ -133,9 +187,9 @@ export default function WhatsAppPage() {
            }
         }
 
-        return {
+        return { // Return updated contact object
           ...contact,
-          unreadCount: unreadCount || 0,
+          unreadCount: unreadCount, // Use the count based on last seen timestamp
           lastMessagePreview: lastMessagePreview,
           lastMessageTimestamp: lastMessageTimestamp,
         };
@@ -161,25 +215,13 @@ export default function WhatsAppPage() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' },
-        async (payload) => { // Made this async to await the fetch
+        (payload) => { // Changed to not async since we are not awaiting fetch here anymore
           console.log('Sidebar Realtime INSERT event triggered!', payload);
           const newMessage = payload.new;
           // Determine the other participant based on who sent the message (from_number or to_number being our number)
           const conversationWaId = newMessage.from_number === whatsappPhoneNumberId ? newMessage.to_number : newMessage.from_number; // Identify the other participant
 
-          // Re-fetch unread count for this specific conversation
-          const { count: newUnreadCount, error: unreadError } = await supabase
-            .from('whatsapp_messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('from_number', conversationWaId) // Messages from this contact
-            .eq('to_number', whatsappPhoneNumberId) // Use the environment variable here
-            .neq('status', 'read'); // Not yet read
-
-          if (unreadError) {
-            console.error(`Error re-fetching unread count for ${conversationWaId}:`, unreadError);
-            // Continue with existing unread count if fetch fails
-          }
-
+          // Update the contacts list in state
           setContacts(currentContacts => {
             const updatedContacts = currentContacts.map(contact => {
               if (contact.wa_id === conversationWaId) {
@@ -203,12 +245,25 @@ export default function WhatsAppPage() {
                      newLastMessagePreview = newLastMessagePreview.substring(0, 50) + '...';
                  }
 
+                // *** Update unread count based on whether the conversation is selected and last seen timestamp ***
+                // Increment unread count only if the conversation is NOT currently selected
+                // and the new message arrived after the last seen timestamp
+                const lastSeen = getLastSeenTimestamp(contact.wa_id);
+                const updatedUnreadCount = contact.wa_id === selectedWaId || (lastSeen && new Date(newMessage.created_at).getTime() <= new Date(lastSeen).getTime())
+                  ? (contact.unreadCount || 0) // Don't increment if selected or message is older than last seen
+                  : (contact.unreadCount || 0) + 1; // Increment if not selected and message is newer
+
+                // *** Update last seen timestamp in localStorage if the conversation is selected ***
+                 if (contact.wa_id === selectedWaId && newMessage.created_at) {
+                     setLastSeenTimestamp(contact.wa_id, newMessage.created_at);
+                      console.log(`Realtime INSERT: Updated last seen timestamp for ${contact.wa_id} to ${newMessage.created_at}`);
+                 }
+
                 return { // Return updated contact object
                   ...contact,
                   lastMessagePreview: newLastMessagePreview,
                   lastMessageTimestamp: newMessage.created_at,
-                  // Use the newly fetched unread count
-                  unreadCount: newUnreadCount !== null ? newUnreadCount : (contact.unreadCount || 0),
+                  unreadCount: updatedUnreadCount,
                 };
               }
               return contact; // Return unchanged contact if not the target conversation
@@ -219,6 +274,7 @@ export default function WhatsAppPage() {
             // For simplicity now, we assume contacts are pre-populated or added elsewhere.
             // A simple approach could be to re-fetch contacts after a small delay:
             // setTimeout(fetchContacts, 1000); // Not ideal for performance
+
              console.log('Contacts after INSERT update:', updatedContacts);
              // Re-sort the list to keep the most recent conversation at the top
              updatedContacts.sort((a, b) => {
@@ -234,29 +290,16 @@ export default function WhatsAppPage() {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'whatsapp_messages' },
-        async (payload) => { // Made this callback async
+        (payload) => { // Removed async as we are not awaiting fetch
           console.log('Sidebar Realtime UPDATE event triggered!', payload);
           const updatedMessage = payload.new;
-          // Determine the other participant based on who sent the message (from_number or to_number being our number)
+          // Determine the other participant
           const conversationWaId = updatedMessage.from_number === whatsappPhoneNumberId ? updatedMessage.to_number : updatedMessage.from_number; // Identify the other participant
-
-          // Re-fetch unread count for this specific conversation
-          const { count: newUnreadCount, error: unreadError } = await supabase
-            .from('whatsapp_messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('from_number', conversationWaId) // Messages from this contact
-            .eq('to_number', whatsappPhoneNumberId) // Use the environment variable here
-            .neq('status', 'read'); // Not yet read
-
-          if (unreadError) {
-            console.error(`Error re-fetching unread count for ${conversationWaId}:`, unreadError);
-            // Continue with existing unread count if fetch fails
-          }
 
           setContacts(currentContacts => {
             const updatedContacts = currentContacts.map(contact => {
               if (contact.wa_id === conversationWaId) {
-                // Update last message preview/timestamp if the updated message is the latest
+                // Update last message preview/timestamp ONLY if the updated message is the latest
                 const isLatestMessage = !contact.lastMessageTimestamp || new Date(updatedMessage.created_at).getTime() >= new Date(contact.lastMessageTimestamp).getTime();
 
                 let newLastMessagePreview = contact.lastMessagePreview;
@@ -284,12 +327,15 @@ export default function WhatsAppPage() {
                   newLastMessageTimestamp = updatedMessage.created_at;
                 }
 
+                // *** Do NOT re-fetch unread count here. Unread count is handled by INSERT and markMessagesAsRead ***
+                // Keep existing unread count from state
+                const updatedUnreadCount = contact.unreadCount;
+
                 return { // Return updated contact object
                   ...contact,
-                  // Use the newly fetched unread count
-                  unreadCount: newUnreadCount !== null ? newUnreadCount : (contact.unreadCount || 0),
-                  lastMessagePreview: newLastMessagePreview,
-                  lastMessageTimestamp: newLastMessageTimestamp,
+                  unreadCount: updatedUnreadCount, // Use the count managed by INSERT/markMessagesAsRead
+                  lastMessagePreview: newLastMessagePreview, // Update only if latest message
+                  lastMessageTimestamp: newLastMessageTimestamp, // Update only if latest message
                 };
               }
               return contact; // Return unchanged contact
@@ -317,7 +363,7 @@ export default function WhatsAppPage() {
 
     return cleanup;
 
-  }, [supabase, whatsappPhoneNumberId]); // Depend on supabase and whatsappPhoneNumberId
+  }, [supabase, whatsappPhoneNumberId, selectedWaId]); // Depend on supabase, whatsappPhoneNumberId, and selectedWaId
 
   // *** Effect 2: Mark messages as read when a conversation is selected ***
   useEffect(() => {
@@ -326,7 +372,7 @@ export default function WhatsAppPage() {
       console.log(`Selected conversation changed to: ${selectedWaId}. Marking messages as read.`);
       markMessagesAsRead(selectedWaId);
     }
-  }, [selectedWaId, whatsappPhoneNumberId, supabase]); // Depend on selectedWaId, whatsappPhoneNumberId, and supabase
+  }, [selectedWaId, whatsappPhoneNumberId, supabase, markMessagesAsRead]); // Added markMessagesAsRead dependency
 
   if (loading) {
     return <div>Loading conversations...</div>;
