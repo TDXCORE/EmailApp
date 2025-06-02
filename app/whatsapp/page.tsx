@@ -19,10 +19,37 @@ export default function WhatsAppPage() {
   // Get the WhatsApp Phone Number ID from environment variables
   const whatsappPhoneNumberId = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID;
 
+  // Function to mark messages as read
+  const markMessagesAsRead = async (contactWaId: string) => {
+    if (!whatsappPhoneNumberId) {
+      console.error('Cannot mark messages as read: WhatsApp Phone Number ID is not set.');
+      return;
+    }
+    console.log(`Marking messages as read for conversation with ${contactWaId}`);
+    const { error } = await supabase
+      .from('whatsapp_messages')
+      .update({ status: 'read' })
+      .eq('from_number', contactWaId) // Messages from this contact
+      .eq('to_number', whatsappPhoneNumberId) // Messages sent to our number
+      .neq('status', 'read'); // Only update if not already read
+
+    if (error) {
+      console.error(`Error marking messages as read for ${contactWaId}:`, error);
+    } else {
+       console.log(`Successfully marked messages as read for ${contactWaId}`);
+    }
+  };
+
   useEffect(() => {
     console.log('useEffect in WhatsAppPage running'); // Log useEffect start
     console.log('Using Supabase client from auth-helpers in WhatsAppPage', supabase ? '***INITIALIZED***' : '***NOT INITIALIZED***');
     console.log('WhatsApp Phone Number ID:', whatsappPhoneNumberId);
+
+    // *** Add logs for dependencies here ***
+    console.log('useEffect dependencies - supabase:', supabase);
+    console.log('useEffect dependencies - whatsappPhoneNumberId:', whatsappPhoneNumberId);
+    console.log('useEffect dependencies array:', [supabase, whatsappPhoneNumberId]);
+    // ***********************************
 
     if (!whatsappPhoneNumberId) {
       console.error('NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID is not set.');
@@ -288,12 +315,21 @@ export default function WhatsAppPage() {
       .subscribe();
 
     // Cleanup function for the subscription
-    return () => {
+    const cleanup = () => {
       console.log('Cleaning up sidebar realtime subscription.');
       supabase.removeChannel(messagesChannel);
     };
 
-  }, [supabase, whatsappPhoneNumberId]); // Depend on supabase and whatsappPhoneNumberId
+    // *** Add logic to mark messages as read when conversation is selected ***
+    if (selectedWaId && whatsappPhoneNumberId) {
+        // Call the function to mark messages as read for the selected conversation
+        markMessagesAsRead(selectedWaId);
+    }
+    // *********************************************************************
+
+    return cleanup; // Use the cleanup function here
+
+  }, [supabase, whatsappPhoneNumberId, selectedWaId]); // Add selectedWaId to dependencies
 
   if (loading) {
     return <div>Loading conversations...</div>;
