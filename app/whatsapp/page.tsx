@@ -40,19 +40,14 @@ export default function WhatsAppPage() {
     }
   };
 
+  // *** Effect 1: Fetch contacts and setup Realtime subscription for the sidebar ***
   useEffect(() => {
-    console.log('useEffect in WhatsAppPage running'); // Log useEffect start
+    console.log('useEffect [supabase, whatsappPhoneNumberId] running'); // Log this effect
     console.log('Using Supabase client from auth-helpers in WhatsAppPage', supabase ? '***INITIALIZED***' : '***NOT INITIALIZED***');
-    console.log('WhatsApp Phone Number ID:', whatsappPhoneNumberId);
-
-    // *** Add logs for dependencies here ***
-    console.log('useEffect dependencies - supabase:', supabase);
-    console.log('useEffect dependencies - whatsappPhoneNumberId:', whatsappPhoneNumberId);
-    console.log('useEffect dependencies array:', [supabase, whatsappPhoneNumberId]);
-    // ***********************************
+    console.log('WhatsApp Phone Number ID for Realtime:', whatsappPhoneNumberId);
 
     if (!whatsappPhoneNumberId) {
-      console.error('NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID is not set.');
+      console.error('NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER_ID is not set. Realtime subscription not active.');
       setError('Configuration error: WhatsApp Phone Number ID is not set.');
       setLoading(false);
       return; // Exit if the phone number ID is not set
@@ -320,16 +315,18 @@ export default function WhatsAppPage() {
       supabase.removeChannel(messagesChannel);
     };
 
-    // *** Add logic to mark messages as read when conversation is selected ***
-    if (selectedWaId && whatsappPhoneNumberId) {
-        // Call the function to mark messages as read for the selected conversation
-        markMessagesAsRead(selectedWaId);
+    return cleanup;
+
+  }, [supabase, whatsappPhoneNumberId]); // Depend on supabase and whatsappPhoneNumberId
+
+  // *** Effect 2: Mark messages as read when a conversation is selected ***
+  useEffect(() => {
+    console.log('useEffect [selectedWaId, whatsappPhoneNumberId, supabase] running'); // Log this effect
+    if (selectedWaId && whatsappPhoneNumberId && supabase) {
+      console.log(`Selected conversation changed to: ${selectedWaId}. Marking messages as read.`);
+      markMessagesAsRead(selectedWaId);
     }
-    // *********************************************************************
-
-    return cleanup; // Use the cleanup function here
-
-  }, [supabase, whatsappPhoneNumberId, selectedWaId]); // Add selectedWaId to dependencies
+  }, [selectedWaId, whatsappPhoneNumberId, supabase]); // Depend on selectedWaId, whatsappPhoneNumberId, and supabase
 
   if (loading) {
     return <div>Loading conversations...</div>;
