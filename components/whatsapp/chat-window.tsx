@@ -16,6 +16,12 @@ interface ChatWindowProps {
 const MessageBubble = ({ message, contact }: { message: WhatsAppRealtimeMessage; contact?: Contact }) => {
   const isSent = message.isOutgoing;
 
+  // Log the message content when rendering
+  console.log('Rendering message:', message);
+  if (message.type !== 'text' && message.content && message.content[message.type]?.link) {
+      console.log(`Media message (${message.type}) link:`, message.content[message.type].link);
+  }
+
   // Function to format timestamp (e.g., "3:51 PM")
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
