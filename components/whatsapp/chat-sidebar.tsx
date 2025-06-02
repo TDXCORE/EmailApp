@@ -7,6 +7,8 @@ interface Contact {
   id: string;
   wa_id: string;
   profile?: { name?: string };
+  unreadCount?: number;
+  lastMessagePreview?: string | null;
 }
 
 interface ChatSidebarProps {
@@ -68,14 +70,18 @@ export default function ChatSidebar({ contacts, onSelectConversation, selectedWa
                       {/* You would replace this with actual last message timestamp from your data */}
                       {/* <span className="text-xs text-gray-500 ml-2">3:51 PM</span> */}
                     </div>
-                    {/* Placeholder for Last Message Snippet */}
-                    {/* You would replace this with actual last message content from your data */}
-                    {/* <p className="text-sm text-gray-600 truncate">Last message snippet...</p> */}
+                    {/* Display Last Message Snippet */}
+                    {contact.lastMessagePreview && (
+                      <p className="text-sm text-gray-600 truncate">{contact.lastMessagePreview}</p>
+                    )}
                   </div>
 
-                  {/* Placeholder for Unread Count */}
-                  {/* You would conditionally render this based on unread count data */}
-                  {/* <div className="ml-2 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">3</div> */}
+                  {/* Display Unread Count */}
+                  {contact.unreadCount && contact.unreadCount > 0 && (
+                    <div className="ml-2 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {contact.unreadCount}
+                    </div>
+                  )}
                 </button>
               </li>
             ))}

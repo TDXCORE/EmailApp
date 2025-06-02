@@ -23,29 +23,95 @@ export default function WhatsAppPage() {
     async function fetchContacts() {
       console.log('Fetching contacts from Supabase...'); // Log fetch start
       setLoading(true);
-      
-      const { data, error } = await supabase
+
+      const { data: contactsData, error: contactsError } = await supabase
         .from('whatsapp_contacts')
         .select('id, wa_id, profile')
         .order('updated_at', { ascending: false }); // Order by last updated
 
-      console.log('Supabase fetch result:', { data, error }); // Log fetch result
+      console.log('Supabase fetch result:', { data: contactsData, error: contactsError }); // Log fetch result
 
-      if (error) {
-        console.error('Error fetching contacts:', error);
+      if (contactsError) {
+        console.error('Error fetching contacts:', contactsError);
         setError('Failed to load contacts.');
-      } else {
-        console.log(`Fetched ${data ? data.length : 0} contacts.`); // Log number of contacts
-        setContacts(data || []);
+        setLoading(false);
+        return; // Exit if contacts fetch fails
       }
+
+      if (!contactsData) {
+        console.log('No contacts found.');
+        setContacts([]);
+        setLoading(false);
+        return; // No contacts to process
+      }
+
+      console.log(`Fetched ${contactsData.length} contacts.`); // Log number of contacts
+
+      // Fetch unread count and last message for each contact
+      const contactsWithData = await Promise.all(contactsData.map(async (contact) => {
+        // Fetch unread count (messages sent TO our number that are not read)
+        const { count: unreadCount, error: unreadError } = await supabase
+          .from('whatsapp_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('from_number', contact.wa_id) // Messages from this contact
+          .eq('to_number', 'TU_NUMERO_DE_EMPRESA') // Replace with your company's WhatsApp number ID
+          .neq('status', 'read'); // Not yet read
+
+        if (unreadError) {
+          console.error(`Error fetching unread count for ${contact.wa_id}:`, unreadError);
+        }
+
+        // Fetch the last message content
+        const { data: lastMessageData, error: lastMessageError } = await supabase
+          .from('whatsapp_messages')
+          .select('type, content')
+          .or(`from_number.eq.${contact.wa_id},to_number.eq.${contact.wa_id}`) // Messages involving this contact
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        let lastMessagePreview: string | null = null;
+        if (lastMessageError) {
+          console.error(`Error fetching last message for ${contact.wa_id}:`, lastMessageError);
+        } else if (lastMessageData && lastMessageData.length > 0) {
+          const lastMessage = lastMessageData[0];
+          // Generate a preview based on message type
+          if (lastMessage.type === 'text' && lastMessage.content?.text?.body) {
+            lastMessagePreview = lastMessage.content.text.body; // Use text body
+          } else if (lastMessage.type !== 'text' && lastMessage.content && lastMessage.content[lastMessage.type]) {
+              // For media types, show the type or caption/filename if available
+              const mediaContent = lastMessage.content[lastMessage.type];
+              if (mediaContent.caption) {
+                  lastMessagePreview = mediaContent.caption; // Use caption
+              } else if (mediaContent.filename) {
+                   lastMessagePreview = mediaContent.filename; // Use filename for documents
+              } else {
+                lastMessagePreview = `[${lastMessage.type.charAt(0).toUpperCase()}${lastMessage.type.slice(1)}]`; // e.g., [Image], [Audio]
+              }
+          } else {
+               lastMessagePreview = '[Unsupported Message Type]'; // Fallback for unexpected content structure
+          }
+           // Truncate preview if too long
+           if (lastMessagePreview && lastMessagePreview.length > 50) {
+              lastMessagePreview = lastMessagePreview.substring(0, 50) + '...';
+           }
+        }
+
+        return {
+          ...contact,
+          unreadCount: unreadCount || 0,
+          lastMessagePreview: lastMessagePreview,
+        };
+      }));
+
+      setContacts(contactsWithData);
       setLoading(false);
-      console.log('Finished fetching contacts.'); // Log fetch end
+      console.log('Finished fetching contacts with message data.'); // Log fetch end
     }
 
     fetchContacts();
 
     // Consider adding a real-time subscription here to automatically add new contacts
-    // to the list if a message is received from a new number.
+    // to the list if a message is received from a new number and update message previews and unread counts
 
   }, [supabase]); // Depend on supabase to ensure it's initialized
 

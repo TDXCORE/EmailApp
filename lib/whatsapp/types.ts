@@ -40,6 +40,8 @@ export interface Contact {
   id: string;
   wa_id: string;
   profile?: { name?: string };
+  unreadCount?: number;
+  lastMessagePreview?: string | null;
 }
 
 export interface WhatsAppConversation {
